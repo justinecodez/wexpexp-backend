@@ -1,0 +1,121 @@
+export enum UserRole {
+  ADMIN = 'ADMIN',
+  USER = 'USER',
+  VENDOR = 'VENDOR',
+}
+
+export enum BusinessType {
+  INDIVIDUAL = 'INDIVIDUAL',
+  COMPANY = 'COMPANY',
+  ORGANIZATION = 'ORGANIZATION',
+}
+
+export enum EventType {
+  WEDDING = 'WEDDING',
+  BIRTHDAY = 'BIRTHDAY',
+  CORPORATE = 'CORPORATE',
+  CONFERENCE = 'CONFERENCE',
+  PARTY = 'PARTY',
+  CULTURAL = 'CULTURAL',
+  RELIGIOUS = 'RELIGIOUS',
+  OTHER = 'OTHER',
+}
+
+export enum EventStatus {
+  DRAFT = 'DRAFT',
+  ACTIVE = 'ACTIVE',
+  COMPLETED = 'COMPLETED',
+  CANCELLED = 'CANCELLED',
+}
+
+export enum InvitationMethod {
+  EMAIL = 'EMAIL',
+  SMS = 'SMS',
+  WHATSAPP = 'WHATSAPP',
+}
+
+export enum DeliveryStatus {
+  PENDING = 'PENDING',
+  SENT = 'SENT',
+  DELIVERED = 'DELIVERED',
+  FAILED = 'FAILED',
+}
+
+export enum RSVPStatus {
+  PENDING = 'PENDING',
+  ACCEPTED = 'ACCEPTED',
+  DECLINED = 'DECLINED',
+}
+
+export enum BookingStatus {
+  PENDING = 'PENDING',
+  CONFIRMED = 'CONFIRMED',
+  CANCELLED = 'CANCELLED',
+  COMPLETED = 'COMPLETED',
+}
+
+export enum PaymentStatus {
+  PENDING = 'PENDING',
+  PAID = 'PAID',
+  FAILED = 'FAILED',
+  REFUNDED = 'REFUNDED',
+}
+
+export enum ServiceType {
+  TOUR = 'TOUR',
+  VEHICLE = 'VEHICLE',
+  ACCOMMODATION = 'ACCOMMODATION',
+  VENUE = 'VENUE',
+  DECORATION = 'DECORATION',
+  CAR_IMPORT = 'CAR_IMPORT',
+  INSURANCE = 'INSURANCE',
+  BUDGET = 'BUDGET',
+}
+
+export enum TourCategory {
+  SAFARI = 'SAFARI',
+  CULTURAL = 'CULTURAL',
+  ADVENTURE = 'ADVENTURE',
+  CITY_TOUR = 'CITY_TOUR',
+  BEACH = 'BEACH',
+  HISTORICAL = 'HISTORICAL',
+}
+
+export enum VehicleType {
+  SEDAN = 'SEDAN',
+  SUV = 'SUV',
+  VAN = 'VAN',
+  BUS = 'BUS',
+  PICKUP = 'PICKUP',
+  MOTORCYCLE = 'MOTORCYCLE',
+}
+
+export enum AccommodationType {
+  HOTEL = 'HOTEL',
+  LODGE = 'LODGE',
+  CAMP = 'CAMP',
+  RESORT = 'RESORT',
+  GUESTHOUSE = 'GUESTHOUSE',
+  APARTMENT = 'APARTMENT',
+}
+
+export enum TanzaniaCity {
+  DAR_ES_SALAAM = 'DAR_ES_SALAAM',
+  ARUSHA = 'ARUSHA',
+  ZANZIBAR = 'ZANZIBAR',
+  MWANZA = 'MWANZA',
+  DODOMA = 'DODOMA',
+  TANGA = 'TANGA',
+  MOROGORO = 'MOROGORO',
+  MBEYA = 'MBEYA',
+  IRINGA = 'IRINGA',
+  KILIMANJARO = 'KILIMANJARO',
+}
+
+export enum NotificationType {
+  BOOKING_CONFIRMATION = 'BOOKING_CONFIRMATION',
+  EVENT_REMINDER = 'EVENT_REMINDER',
+  RSVP_UPDATE = 'RSVP_UPDATE',
+  PAYMENT_STATUS = 'PAYMENT_STATUS',
+  SYSTEM_ALERT = 'SYSTEM_ALERT',
+}
