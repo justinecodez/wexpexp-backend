@@ -11,45 +11,45 @@ import { Booking } from './Booking';
 @Entity('decorations')
 export class Decoration {
   @PrimaryGeneratedColumn('uuid')
-  id: string;
+  id!: string;
 
   @Column({ name: 'package_name' })
-  packageName: string;
+  packageName!: string;
 
   @Column()
-  description: string;
+  description!: string;
 
   @Column('decimal', { precision: 10, scale: 2, name: 'price_tzs' })
-  priceTzs: number;
+  priceTzs!: number;
 
   @Column('json', { nullable: true })
-  images: string[];
+  images!: string[];
 
   @Column('json', { nullable: true })
-  services: string[];
+  services!: string[];
 
   @Column('json', { name: 'suitable_for', nullable: true })
-  suitableFor: string[];
+  suitableFor!: string[];
 
   @Column({ name: 'setup_time', nullable: true })
-  setupTime: string;
+  setupTime!: string;
 
   @Column({ nullable: true })
-  coverage: string;
+  coverage!: string;
 
   @Column('json', { nullable: true })
-  extras: string[];
+  extras!: string[];
 
   @Column({ name: 'is_active', default: true })
-  isActive: boolean;
+  isActive!: boolean;
 
   @CreateDateColumn({ name: 'created_at' })
-  createdAt: Date;
+  createdAt!: Date;
 
   @UpdateDateColumn({ name: 'updated_at' })
-  updatedAt: Date;
+  updatedAt!: Date;
 
   // Relations
   @OneToMany(() => Booking, booking => booking.decoration)
-  bookings: Booking[];
+  bookings!: Booking[];
 }

@@ -1,4 +1,4 @@
-import { prisma } from '../config/database';
+import database from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import {
   ServiceFilter,
@@ -8,8 +8,22 @@ import {
   PaginationInfo,
 } from '../types';
 import logger from '../config/logger';
+import { Accommodation } from '../entities/Accommodation';
+import { Booking } from '../entities/Booking';
+import { BookingStatus, PaymentStatus, ServiceType } from '../entities/enums';
+import { Repository } from 'typeorm';
 
 export class AccommodationService {
+  private accommodationRepository: Repository<Accommodation>;
+  private bookingRepository: Repository<Booking>;
+
+  constructor() {
+    this.accommodationRepository = database.getRepository(
+      Accommodation
+    ) as Repository<Accommodation>;
+    this.bookingRepository = database.getRepository(Booking) as Repository<Booking>;
+  }
+
   /**
    * Get all accommodations with filtering and pagination
    */
@@ -22,37 +36,37 @@ export class AccommodationService {
 
     const skip = (page - 1) * limit;
 
-    // Build where clause
-    const where: any = {
-      isActive: true,
-    };
+    // Build query using TypeORM query builder
+    const queryBuilder = this.accommodationRepository.createQueryBuilder('accommodation');
+
+    // Apply basic filters
+    queryBuilder.where('accommodation.isActive = :isActive', { isActive: true });
 
     if (location) {
-      where.location = location;
+      queryBuilder.andWhere('accommodation.location = :location', { location });
     }
 
     if (type) {
-      where.type = type;
+      queryBuilder.andWhere('accommodation.type = :type', { type });
     }
 
+    // Handle search
     if (search) {
-      where.OR = [
-        { name: { contains: search, mode: 'insensitive' } },
-        { description: { contains: search, mode: 'insensitive' } },
-        { address: { contains: search, mode: 'insensitive' } },
-      ];
+      queryBuilder.andWhere(
+        '(accommodation.name ILIKE :search OR accommodation.description ILIKE :search OR accommodation.address ILIKE :search)',
+        { search: `%${search}%` }
+      );
     }
 
     // Get total count
-    const total = await prisma.accommodation.count({ where });
+    const total = await queryBuilder.getCount();
 
-    // Get accommodations
-    const accommodations = await prisma.accommodation.findMany({
-      where,
-      skip,
-      take: limit,
-      orderBy: { [sortBy]: sortOrder },
-    });
+    // Get accommodations with pagination and sorting
+    const accommodations = await queryBuilder
+      .orderBy(`accommodation.${sortBy}`, sortOrder.toUpperCase() as 'ASC' | 'DESC')
+      .skip(skip)
+      .take(limit)
+      .getMany();
 
     const formattedAccommodations = accommodations.map(this.formatAccommodationResponse);
 
@@ -75,7 +89,7 @@ export class AccommodationService {
    * Get accommodation by ID
    */
   async getAccommodationById(accommodationId: string): Promise<any> {
-    const accommodation = await prisma.accommodation.findUnique({
+    const accommodation = await this.accommodationRepository.findOne({
       where: { id: accommodationId },
     });
 
@@ -101,7 +115,7 @@ export class AccommodationService {
     }
 
     // Verify accommodation exists
-    const accommodation = await prisma.accommodation.findUnique({
+    const accommodation = await this.accommodationRepository.findOne({
       where: { id: serviceId },
     });
 
@@ -128,27 +142,27 @@ export class AccommodationService {
     const totalAmountTzs = baseRate * nights;
 
     // Create booking
-    const booking = await prisma.booking.create({
-      data: {
-        userId,
-        serviceType: 'ACCOMMODATION',
-        serviceId,
-        bookingDate: new Date(bookingDate),
-        startDate: checkIn,
-        endDate: checkOut,
-        guests: guests || 1,
-        totalAmountTzs,
-        specialRequests,
-        status: 'PENDING',
-        paymentStatus: 'PENDING',
-      },
+    const booking = this.bookingRepository.create({
+      userId,
+      serviceType: ServiceType.ACCOMMODATION,
+      serviceId,
+      bookingDate: new Date(bookingDate),
+      startDate: checkIn,
+      endDate: checkOut,
+      guests: guests || 1,
+      totalAmountTzs,
+      specialRequests,
+      status: BookingStatus.PENDING,
+      paymentStatus: PaymentStatus.PENDING,
     });
 
+    const savedBooking = await this.bookingRepository.save(booking);
+
     logger.info(
-      `Accommodation booked: ${booking.id} for accommodation: ${serviceId} by user: ${userId}`
+      `Accommodation booked: ${savedBooking.id} for accommodation: ${serviceId} by user: ${userId}`
     );
 
-    return this.formatBookingResponse(booking);
+    return this.formatBookingResponse(savedBooking);
   }
 
   /**
@@ -171,26 +185,18 @@ export class AccommodationService {
       where.status = filters.status;
     }
 
-    const total = await prisma.booking.count({ where });
+    const total = await this.bookingRepository.count({ where });
 
-    const bookings = await prisma.booking.findMany({
-      where,
-      skip,
-      take: limit,
-      orderBy: { [sortBy]: sortOrder },
-      include: {
-        accommodation: {
-          select: {
-            name: true,
-            type: true,
-            location: true,
-            address: true,
-            images: true,
-            amenities: true,
-          },
-        },
-      },
-    });
+    const bookings = await this.bookingRepository
+      .createQueryBuilder('booking')
+      .leftJoinAndSelect('booking.accommodation', 'accommodation')
+      .where('booking.userId = :userId', { userId })
+      .andWhere('booking.serviceType = :serviceType', { serviceType: ServiceType.ACCOMMODATION })
+      .andWhere(filters?.status ? 'booking.status = :status' : '1=1', { status: filters?.status })
+      .orderBy(`booking.${sortBy}`, sortOrder.toUpperCase() as 'ASC' | 'DESC')
+      .skip(skip)
+      .take(limit)
+      .getMany();
 
     const formattedBookings = bookings.map((booking: any) => ({
       ...this.formatBookingResponse(booking),

@@ -12,40 +12,40 @@ import { Event } from './Event';
 @Entity('ecards')
 export class ECard {
   @PrimaryGeneratedColumn('uuid')
-  id: string;
+  id!: string;
 
   @Column({ name: 'event_id' })
-  eventId: string;
+  eventId!: string;
 
   @Column({ name: 'template_name' })
-  templateName: string;
+  templateName!: string;
 
   @Column('json', { name: 'custom_design_data', nullable: true })
-  customDesignData: any;
+  customDesignData!: any;
 
   @Column({ name: 'background_image', nullable: true })
-  backgroundImage: string;
+  backgroundImage!: string;
 
   @Column({ name: 'logo_image', nullable: true })
-  logoImage: string;
+  logoImage!: string;
 
   @Column('json', { name: 'color_scheme', nullable: true })
-  colorScheme: any;
+  colorScheme!: any;
 
   @Column({ name: 'message_content', nullable: true })
-  messageContent: string;
+  messageContent!: string;
 
   @Column({ name: 'font_style', nullable: true })
-  fontStyle: string;
+  fontStyle!: string;
 
   @CreateDateColumn({ name: 'created_at' })
-  createdAt: Date;
+  createdAt!: Date;
 
   @UpdateDateColumn({ name: 'updated_at' })
-  updatedAt: Date;
+  updatedAt!: Date;
 
   // Relations
   @ManyToOne(() => Event, event => event.eCards, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'event_id' })
-  event: Event;
+  event!: Event;
 }

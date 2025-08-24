@@ -13,29 +13,29 @@ import { Event } from './Event';
 @Entity('invitations')
 export class Invitation {
   @PrimaryGeneratedColumn('uuid')
-  id: string;
+  id!: string;
 
   @Column({ name: 'event_id' })
-  eventId: string;
+  eventId!: string;
 
   @Column({ name: 'guest_name' })
-  guestName: string;
+  guestName!: string;
 
   @Column({ name: 'guest_email', nullable: true })
-  guestEmail: string;
+  guestEmail!: string;
 
   @Column({ name: 'guest_phone', nullable: true })
-  guestPhone: string;
+  guestPhone!: string;
 
   @Column({
     type: 'varchar',
     enum: InvitationMethod,
     name: 'invitation_method',
   })
-  invitationMethod: InvitationMethod;
+  invitationMethod!: InvitationMethod;
 
   @Column({ name: 'sent_at', nullable: true })
-  sentAt: Date;
+  sentAt!: Date;
 
   @Column({
     type: 'varchar',
@@ -43,7 +43,7 @@ export class Invitation {
     name: 'delivery_status',
     default: DeliveryStatus.PENDING,
   })
-  deliveryStatus: DeliveryStatus;
+  deliveryStatus!: DeliveryStatus;
 
   @Column({
     type: 'varchar',
@@ -51,31 +51,31 @@ export class Invitation {
     name: 'rsvp_status',
     default: RSVPStatus.PENDING,
   })
-  rsvpStatus: RSVPStatus;
+  rsvpStatus!: RSVPStatus;
 
   @Column({ name: 'rsvp_at', nullable: true })
-  rsvpAt: Date;
+  rsvpAt!: Date;
 
   @Column({ name: 'plus_one_count', default: 0 })
-  plusOneCount: number;
+  plusOneCount!: number;
 
   @Column({ name: 'qr_code', unique: true, nullable: true })
-  qrCode: string;
+  qrCode!: string;
 
   @Column({ name: 'check_in_time', nullable: true })
-  checkInTime: Date;
+  checkInTime!: Date;
 
   @Column({ name: 'special_requirements', nullable: true })
-  specialRequirements: string;
+  specialRequirements!: string;
 
   @CreateDateColumn({ name: 'created_at' })
-  createdAt: Date;
+  createdAt!: Date;
 
   @UpdateDateColumn({ name: 'updated_at' })
-  updatedAt: Date;
+  updatedAt!: Date;
 
   // Relations
   @ManyToOne(() => Event, event => event.invitations, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'event_id' })
-  event: Event;
+  event!: Event;
 }

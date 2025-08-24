@@ -9,35 +9,35 @@ import {
 @Entity('ecard_templates')
 export class ECardTemplate {
   @PrimaryGeneratedColumn('uuid')
-  id: string;
+  id!: string;
 
   @Column()
-  name: string;
+  name!: string;
 
   @Column()
-  category: string;
+  category!: string;
 
   @Column({ nullable: true })
-  description: string;
+  description!: string;
 
   @Column()
-  thumbnail: string;
+  thumbnail!: string;
 
   @Column('json', { name: 'template_data' })
-  templateData: any;
+  templateData!: any;
 
   @Column({ name: 'is_active', default: true })
-  isActive: boolean;
+  isActive!: boolean;
 
   @Column({ name: 'is_premium', default: false })
-  isPremium: boolean;
+  isPremium!: boolean;
 
   @Column('json', { nullable: true })
-  tags: string[];
+  tags!: string[];
 
   @CreateDateColumn({ name: 'created_at' })
-  createdAt: Date;
+  createdAt!: Date;
 
   @UpdateDateColumn({ name: 'updated_at' })
-  updatedAt: Date;
+  updatedAt!: Date;
 }

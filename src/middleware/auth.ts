@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { prisma } from '../config/database';
+import database from '../config/database';
+import { User, Event, Booking } from '../entities';
 import { AppError, catchAsync } from './errorHandler';
 import { JWTPayload, AuthenticatedRequest } from '../types';
 import config from '../config';
@@ -31,16 +32,10 @@ export const authenticate = catchAsync(
     }
 
     // 3) Check if user still exists
-    const currentUser = await prisma.user.findUnique({
+    const userRepository = database.getRepository(User);
+    const currentUser = await userRepository.findOne({
       where: { id: decoded.userId },
-      select: {
-        id: true,
-        email: true,
-        firstName: true,
-        lastName: true,
-        role: true,
-        isVerified: true,
-      },
+      select: ['id', 'email', 'firstName', 'lastName', 'role', 'isVerified'],
     });
 
     if (!currentUser) {
@@ -100,16 +95,10 @@ export const optionalAuth = catchAsync(
       try {
         const decoded = jwt.verify(token, config.jwtSecret) as JWTPayload;
 
-        const currentUser = await prisma.user.findUnique({
+        const userRepository = database.getRepository(User);
+        const currentUser = await userRepository.findOne({
           where: { id: decoded.userId },
-          select: {
-            id: true,
-            email: true,
-            firstName: true,
-            lastName: true,
-            role: true,
-            isVerified: true,
-          },
+          select: ['id', 'email', 'firstName', 'lastName', 'role', 'isVerified'],
         });
 
         if (currentUser && currentUser.isVerified) {
@@ -167,9 +156,10 @@ export const verifyEventOwnership = catchAsync(
     }
 
     // Check if event belongs to user
-    const event = await prisma.event.findUnique({
+    const eventRepository = database.getRepository(Event);
+    const event = await eventRepository.findOne({
       where: { id: eventId },
-      select: { userId: true },
+      select: ['userId'],
     });
 
     if (!event) {
@@ -202,9 +192,10 @@ export const verifyTourBookingOwnership = catchAsync(
     }
 
     // Check if tour booking belongs to user
-    const booking = await prisma.tourBooking.findUnique({
+    const bookingRepository = database.getRepository(Booking);
+    const booking = await bookingRepository.findOne({
       where: { id: bookingId },
-      select: { userId: true },
+      select: ['userId'],
     });
 
     if (!booking) {
@@ -239,9 +230,10 @@ export const verifyVehicleBookingOwnership = catchAsync(
     }
 
     // Check if vehicle booking belongs to user
-    const booking = await prisma.vehicleBooking.findUnique({
+    const bookingRepository = database.getRepository(Booking);
+    const booking = await bookingRepository.findOne({
       where: { id: bookingId },
-      select: { userId: true },
+      select: ['userId'],
     });
 
     if (!booking) {

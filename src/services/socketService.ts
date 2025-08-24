@@ -1,6 +1,9 @@
 import { Server as SocketIOServer } from 'socket.io';
 import jwt from 'jsonwebtoken';
-import { prisma } from '../config/database';
+import database from '../config/database';
+import { User } from '../entities/User';
+import { Event } from '../entities/Event';
+import { Notification } from '../entities/Notification';
 import config from '../config';
 import { JWTPayload } from '../types';
 import logger from '../config/logger';
@@ -21,8 +24,9 @@ export class SocketService {
   private setupMiddleware(): void {
     this.io.use(async (socket, next) => {
       try {
-        const token = socket.handshake.auth?.token || socket.handshake.headers?.authorization?.split(' ')[1];
-        
+        const token =
+          socket.handshake.auth?.token || socket.handshake.headers?.authorization?.split(' ')[1];
+
         if (!token) {
           // Allow anonymous connections for public features
           socket.data.user = null;
@@ -31,9 +35,10 @@ export class SocketService {
 
         // Verify JWT token
         const decoded = jwt.verify(token, config.jwtSecret) as JWTPayload;
-        
+
         // Check if user exists and is verified
-        const user = await prisma.user.findUnique({
+        const userRepository = database.getRepository(User);
+        const user = await userRepository.findOne({
           where: { id: decoded.userId },
           select: {
             id: true,
@@ -62,16 +67,16 @@ export class SocketService {
    * Setup event handlers
    */
   private setupEventHandlers(): void {
-    this.io.on('connection', (socket) => {
+    this.io.on('connection', socket => {
       const user = socket.data.user;
-      
+
       if (user) {
         logger.info(`Authenticated user connected: ${user.email} (${socket.id})`);
         this.authenticatedUsers.set(socket.id, { socketId: socket.id, userId: user.id });
-        
+
         // Join user-specific room
         socket.join(`user_${user.id}`);
-        
+
         // Send welcome message
         socket.emit('connected', {
           message: `Welcome ${user.firstName}!`,
@@ -98,7 +103,7 @@ export class SocketService {
       });
 
       // Handle errors
-      socket.on('error', (error) => {
+      socket.on('error', error => {
         logger.error(`Socket error from ${socket.id}:`, error);
       });
     });
@@ -117,7 +122,8 @@ export class SocketService {
 
       try {
         // Verify user has access to this event
-        const event = await prisma.event.findUnique({
+        const eventRepository = database.getRepository(Event);
+        const event = await eventRepository.findOne({
           where: { id: eventId },
           select: { userId: true, isPublic: true },
         });
@@ -151,7 +157,7 @@ export class SocketService {
     // Real-time event updates
     socket.on('event-update', (data: { eventId: string; update: any }) => {
       if (!socket.data.user) return;
-      
+
       socket.to(`event_${data.eventId}`).emit('event-updated', {
         eventId: data.eventId,
         update: data.update,
@@ -166,23 +172,29 @@ export class SocketService {
    */
   private setupEventHandlers_Invitations(socket: any): void {
     // RSVP updates
-    socket.on('rsvp-update', (data: { invitationId: string; rsvpStatus: string; eventId: string }) => {
-      // Broadcast to event organizer and other participants
-      socket.to(`event_${data.eventId}`).emit('rsvp-updated', {
-        invitationId: data.invitationId,
-        rsvpStatus: data.rsvpStatus,
-        timestamp: new Date().toISOString(),
-      });
-    });
+    socket.on(
+      'rsvp-update',
+      (data: { invitationId: string; rsvpStatus: string; eventId: string }) => {
+        // Broadcast to event organizer and other participants
+        socket.to(`event_${data.eventId}`).emit('rsvp-updated', {
+          invitationId: data.invitationId,
+          rsvpStatus: data.rsvpStatus,
+          timestamp: new Date().toISOString(),
+        });
+      }
+    );
 
     // Guest check-in
-    socket.on('guest-checkin', (data: { invitationId: string; eventId: string; guestName: string }) => {
-      socket.to(`event_${data.eventId}`).emit('guest-checked-in', {
-        invitationId: data.invitationId,
-        guestName: data.guestName,
-        timestamp: new Date().toISOString(),
-      });
-    });
+    socket.on(
+      'guest-checkin',
+      (data: { invitationId: string; eventId: string; guestName: string }) => {
+        socket.to(`event_${data.eventId}`).emit('guest-checked-in', {
+          invitationId: data.invitationId,
+          guestName: data.guestName,
+          timestamp: new Date().toISOString(),
+        });
+      }
+    );
   }
 
   /**
@@ -192,7 +204,7 @@ export class SocketService {
     // Join booking room for updates
     socket.on('join-booking', (bookingId: string) => {
       if (!socket.data.user) return;
-      
+
       socket.join(`booking_${bookingId}`);
       socket.emit('joined-booking', { bookingId });
       logger.info(`User ${socket.data.user.id} joined booking room: ${bookingId}`);
@@ -221,10 +233,10 @@ export class SocketService {
     // Join chat room (could be event-based or booking-based)
     socket.on('join-chat', (roomId: string) => {
       if (!socket.data.user) return;
-      
+
       socket.join(`chat_${roomId}`);
       socket.emit('joined-chat', { roomId });
-      
+
       // Notify others that user joined
       socket.to(`chat_${roomId}`).emit('user-joined-chat', {
         userId: socket.data.user.id,
@@ -236,10 +248,10 @@ export class SocketService {
     // Leave chat room
     socket.on('leave-chat', (roomId: string) => {
       if (!socket.data.user) return;
-      
+
       socket.leave(`chat_${roomId}`);
       socket.emit('left-chat', { roomId });
-      
+
       // Notify others that user left
       socket.to(`chat_${roomId}`).emit('user-left-chat', {
         userId: socket.data.user.id,
@@ -251,7 +263,7 @@ export class SocketService {
     // Send message
     socket.on('send-message', (data: { roomId: string; message: string; type?: string }) => {
       if (!socket.data.user) return;
-      
+
       const messageData = {
         id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         roomId: data.roomId,
@@ -272,7 +284,7 @@ export class SocketService {
     // Typing indicators
     socket.on('typing-start', (roomId: string) => {
       if (!socket.data.user) return;
-      
+
       socket.to(`chat_${roomId}`).emit('user-typing', {
         userId: socket.data.user.id,
         userName: socket.data.user.firstName,
@@ -281,7 +293,7 @@ export class SocketService {
 
     socket.on('typing-stop', (roomId: string) => {
       if (!socket.data.user) return;
-      
+
       socket.to(`chat_${roomId}`).emit('user-stopped-typing', {
         userId: socket.data.user.id,
       });
@@ -351,15 +363,17 @@ export class SocketService {
     }
   ): Promise<void> {
     // Save notification to database
-    await prisma.notification.create({
-      data: {
-        userId,
-        type: notification.type as any,
-        title: notification.title,
-        message: notification.message,
-        data: notification.data,
-      },
+    const notificationRepository = database.getRepository(Notification);
+    const notificationEntity = notificationRepository.create({
+      userId,
+      type: notification.type as any,
+      title: notification.title,
+      message: notification.message,
+      data: notification.data || {},
+      isRead: false,
     });
+
+    await notificationRepository.save(notificationEntity);
 
     // Emit real-time notification
     this.emitToUser(userId, 'notification', {

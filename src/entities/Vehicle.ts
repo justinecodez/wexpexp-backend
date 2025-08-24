@@ -12,70 +12,70 @@ import { Booking } from './Booking';
 @Entity('vehicles')
 export class Vehicle {
   @PrimaryGeneratedColumn('uuid')
-  id: string;
+  id!: string;
 
   @Column()
-  make: string;
+  make!: string;
 
   @Column()
-  model: string;
+  model!: string;
 
   @Column()
-  year: number;
+  year!: number;
 
   @Column({
     type: 'varchar',
     enum: VehicleType,
     name: 'vehicle_type',
   })
-  vehicleType: VehicleType;
+  vehicleType!: VehicleType;
 
   @Column('decimal', { precision: 10, scale: 2, name: 'daily_rate_tzs' })
-  dailyRateTzs: number;
+  dailyRateTzs!: number;
 
   @Column('json', { nullable: true })
-  features: string[];
+  features!: string[];
 
   @Column({ name: 'seating_capacity' })
-  seatingCapacity: number;
+  seatingCapacity!: number;
 
   @Column()
-  transmission: string;
+  transmission!: string;
 
   @Column({ name: 'fuel_type' })
-  fuelType: string;
+  fuelType!: string;
 
   @Column('json', { nullable: true })
-  images: string[];
+  images!: string[];
 
   @Column({
     type: 'varchar',
     enum: TanzaniaCity,
   })
-  location: TanzaniaCity;
+  location!: TanzaniaCity;
 
   @Column({ default: true })
-  availability: boolean;
+  availability!: boolean;
 
   @Column({ name: 'with_driver', default: false })
-  withDriver: boolean;
+  withDriver!: boolean;
 
   @Column('decimal', { precision: 10, scale: 2, name: 'driver_rate_tzs', nullable: true })
-  driverRateTzs: number;
+  driverRateTzs!: number;
 
   @Column({ name: 'license_plate', nullable: true })
-  licensePlate: string;
+  licensePlate!: string;
 
   @Column('json', { nullable: true })
-  insurance: any;
+  insurance!: any;
 
   @CreateDateColumn({ name: 'created_at' })
-  createdAt: Date;
+  createdAt!: Date;
 
   @UpdateDateColumn({ name: 'updated_at' })
-  updatedAt: Date;
+  updatedAt!: Date;
 
   // Relations
   @OneToMany(() => Booking, booking => booking.vehicle)
-  bookings: Booking[];
+  bookings!: Booking[];
 }

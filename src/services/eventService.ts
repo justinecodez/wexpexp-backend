@@ -1,4 +1,8 @@
-import { prisma } from '../config/database';
+import database from '../config/database';
+import { Event } from '../entities/Event';
+import { Invitation } from '../entities/Invitation';
+import { User } from '../entities/User';
+import { Repository } from 'typeorm';
 import { AppError } from '../middleware/errorHandler';
 import {
   CreateEventRequest,

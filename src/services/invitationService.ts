@@ -1,4 +1,9 @@
-import { prisma } from '../config/database';
+import database from '../config/database';
+import { Invitation } from '../entities/Invitation';
+import { Event } from '../entities/Event';
+import { User } from '../entities/User';
+import { Repository, Not, IsNull, In } from 'typeorm';
+import { RSVPStatus, DeliveryStatus, InvitationMethod } from '../entities/enums';
 import { AppError } from '../middleware/errorHandler';
 import {
   CreateInvitationRequest,
@@ -19,6 +24,16 @@ import fs from 'fs';
 import path from 'path';
 
 export class InvitationService {
+  private invitationRepository: Repository<Invitation>;
+  private eventRepository: Repository<Event>;
+  private userRepository: Repository<User>;
+
+  constructor() {
+    this.invitationRepository = database.getRepository(Invitation) as Repository<Invitation>;
+    this.eventRepository = database.getRepository(Event) as Repository<Event>;
+    this.userRepository = database.getRepository(User) as Repository<User>;
+  }
+
   /**
    * Create a single invitation
    */
@@ -30,15 +45,9 @@ export class InvitationService {
       invitationData;
 
     // Verify event ownership
-    const event = await prisma.event.findUnique({
+    const event = await this.eventRepository.findOne({
       where: { id: eventId },
-      select: {
-        userId: true,
-        title: true,
-        eventDate: true,
-        maxGuests: true,
-        currentRsvpCount: true,
-      },
+      select: ['userId', 'title', 'eventDate', 'maxGuests', 'currentRsvpCount'],
     });
 
     if (!event) {
@@ -78,12 +87,14 @@ export class InvitationService {
     }
 
     // Check for duplicate invitations
-    const existingInvitation = await prisma.invitation.findFirst({
-      where: {
-        eventId,
-        OR: [{ guestEmail: guestEmail?.toLowerCase() }, { guestPhone: formattedPhone }],
-      },
-    });
+    const existingInvitation = await this.invitationRepository
+      .createQueryBuilder('invitation')
+      .where('invitation.eventId = :eventId', { eventId })
+      .andWhere('(invitation.guestEmail = :email OR invitation.guestPhone = :phone)', {
+        email: guestEmail?.toLowerCase(),
+        phone: formattedPhone,
+      })
+      .getOne();
 
     if (existingInvitation) {
       throw new AppError(
@@ -98,26 +109,26 @@ export class InvitationService {
     const qrCodeDataUrl = await QRCode.toDataURL(qrCode);
 
     // Create invitation
-    const invitation = await prisma.invitation.create({
-      data: {
-        eventId,
-        guestName,
-        guestEmail: guestEmail?.toLowerCase(),
-        guestPhone: formattedPhone,
-        invitationMethod: invitationMethod as any,
-        qrCode,
-        specialRequirements,
-        deliveryStatus: 'PENDING',
-        rsvpStatus: 'PENDING',
-      },
+    const invitation = this.invitationRepository.create({
+      eventId,
+      guestName,
+      guestEmail: guestEmail?.toLowerCase(),
+      guestPhone: formattedPhone,
+      invitationMethod: invitationMethod as any,
+      qrCode,
+      specialRequirements,
+      deliveryStatus: DeliveryStatus.PENDING,
+      rsvpStatus: RSVPStatus.PENDING,
     });
 
+    const savedInvitation = await this.invitationRepository.save(invitation);
+
     // Send invitation
-    await this.sendInvitation(invitation.id, event.title, event.eventDate);
+    await this.sendInvitation(savedInvitation.id, event.title, event.eventDate);
 
-    logger.info(`Invitation created: ${invitation.id} for event: ${eventId}`);
+    logger.info(`Invitation created: ${savedInvitation.id} for event: ${eventId}`);
 
-    return this.formatInvitationResponse(invitation);
+    return this.formatInvitationResponse(savedInvitation);
   }
 
   /**
@@ -133,15 +144,9 @@ export class InvitationService {
     const { eventId, invitations } = bulkData;
 
     // Verify event ownership
-    const event = await prisma.event.findUnique({
+    const event = await this.eventRepository.findOne({
       where: { id: eventId },
-      select: {
-        userId: true,
-        title: true,
-        eventDate: true,
-        maxGuests: true,
-        currentRsvpCount: true,
-      },
+      select: ['userId', 'title', 'eventDate', 'maxGuests', 'currentRsvpCount'],
     });
 
     if (!event) {
@@ -192,9 +197,9 @@ export class InvitationService {
     }
   ): Promise<{ invitations: InvitationResponse[]; pagination: PaginationInfo }> {
     // Verify event ownership
-    const event = await prisma.event.findUnique({
+    const event = await this.eventRepository.findOne({
       where: { id: eventId },
-      select: { userId: true },
+      select: ['userId'],
     });
 
     if (!event) {
@@ -223,23 +228,68 @@ export class InvitationService {
       where.invitationMethod = filters.invitationMethod;
     }
 
+    // For search, we'll use query builder if needed
     if (filters?.search) {
-      where.OR = [
-        { guestName: { contains: filters.search, mode: 'insensitive' } },
-        { guestEmail: { contains: filters.search, mode: 'insensitive' } },
-        { guestPhone: { contains: filters.search, mode: 'insensitive' } },
-      ];
+      const queryBuilder = this.invitationRepository.createQueryBuilder('invitation');
+      queryBuilder.where('invitation.eventId = :eventId', { eventId });
+
+      if (filters.rsvpStatus) {
+        queryBuilder.andWhere('invitation.rsvpStatus = :rsvpStatus', {
+          rsvpStatus: filters.rsvpStatus,
+        });
+      }
+      if (filters.deliveryStatus) {
+        queryBuilder.andWhere('invitation.deliveryStatus = :deliveryStatus', {
+          deliveryStatus: filters.deliveryStatus,
+        });
+      }
+      if (filters.invitationMethod) {
+        queryBuilder.andWhere('invitation.invitationMethod = :invitationMethod', {
+          invitationMethod: filters.invitationMethod,
+        });
+      }
+
+      queryBuilder.andWhere(
+        '(invitation.guestName ILIKE :search OR invitation.guestEmail ILIKE :search OR invitation.guestPhone ILIKE :search)',
+        { search: `%${filters.search}%` }
+      );
+
+      // Get total count
+      const total = await queryBuilder.getCount();
+
+      // Get invitations with pagination
+      const invitations = await queryBuilder
+        .orderBy(`invitation.${sortBy}`, sortOrder.toUpperCase() as 'ASC' | 'DESC')
+        .skip(skip)
+        .take(limit)
+        .getMany();
+
+      const formattedInvitations = invitations.map(this.formatInvitationResponse);
+
+      const paginationInfo: PaginationInfo = {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasNext: page * limit < total,
+        hasPrev: page > 1,
+      };
+
+      return {
+        invitations: formattedInvitations,
+        pagination: paginationInfo,
+      };
     }
 
     // Get total count
-    const total = await prisma.invitation.count({ where });
+    const total = await this.invitationRepository.count({ where });
 
     // Get invitations
-    const invitations = await prisma.invitation.findMany({
+    const invitations = await this.invitationRepository.find({
       where,
       skip,
       take: limit,
-      orderBy: { [sortBy]: sortOrder },
+      order: { [sortBy]: sortOrder.toUpperCase() as 'ASC' | 'DESC' },
     });
 
     const formattedInvitations = invitations.map(this.formatInvitationResponse);
@@ -265,13 +315,10 @@ export class InvitationService {
   async updateRSVP(invitationId: string, rsvpData: RSVPRequest): Promise<InvitationResponse> {
     const { rsvpStatus, plusOneCount = 0, specialRequirements } = rsvpData;
 
-    const invitation = await prisma.invitation.findUnique({
+    const invitation = await this.invitationRepository.findOne({
       where: { id: invitationId },
-      include: {
-        event: {
-          select: { maxGuests: true, currentRsvpCount: true },
-        },
-      },
+      relations: ['event'],
+      select: ['id', 'eventId', 'rsvpStatus', 'plusOneCount'],
     });
 
     if (!invitation) {
@@ -293,41 +340,43 @@ export class InvitationService {
     }
 
     // Update invitation
-    const updatedInvitation = await prisma.$transaction(async (tx: any) => {
-      const updated = await tx.invitation.update({
-        where: { id: invitationId },
-        data: {
-          rsvpStatus: rsvpStatus as any,
-          rsvpAt: new Date(),
-          plusOneCount,
-          specialRequirements,
-        },
+    const updatedInvitation = await database
+      .getEntityManager()
+      .transaction(async transactionalEntityManager => {
+        const updated = await transactionalEntityManager.getRepository('Invitation').save(
+          Object.assign(invitation, {
+            rsvpStatus: rsvpStatus as any,
+            rsvpAt: new Date(),
+            plusOneCount,
+            specialRequirements,
+          })
+        );
+
+        // Update event RSVP count
+        if (rsvpStatus === 'ACCEPTED') {
+          const event = await transactionalEntityManager
+            .getRepository('Event')
+            .findOne({ where: { id: invitation.eventId } });
+          if (event) {
+            event.currentRsvpCount = (event.currentRsvpCount || 0) + 1 + plusOneCount;
+            await transactionalEntityManager.getRepository('Event').save(event);
+          }
+        } else if (rsvpStatus === 'DECLINED' && invitation.rsvpStatus === 'ACCEPTED') {
+          // If changing from accepted to declined, decrement count
+          const event = await transactionalEntityManager
+            .getRepository('Event')
+            .findOne({ where: { id: invitation.eventId } });
+          if (event) {
+            event.currentRsvpCount = Math.max(
+              0,
+              (event.currentRsvpCount || 0) - 1 - (invitation.plusOneCount || 0)
+            );
+            await transactionalEntityManager.getRepository('Event').save(event);
+          }
+        }
+
+        return updated;
       });
-
-      // Update event RSVP count
-      if (rsvpStatus === 'ACCEPTED') {
-        await tx.event.update({
-          where: { id: invitation.eventId },
-          data: {
-            currentRsvpCount: {
-              increment: 1 + plusOneCount,
-            },
-          },
-        });
-      } else if (rsvpStatus === 'DECLINED' && invitation.rsvpStatus === 'ACCEPTED') {
-        // If changing from accepted to declined, decrement count
-        await tx.event.update({
-          where: { id: invitation.eventId },
-          data: {
-            currentRsvpCount: {
-              decrement: 1 + invitation.plusOneCount,
-            },
-          },
-        });
-      }
-
-      return updated;
-    });
 
     logger.info(`RSVP updated: ${invitationId} - ${rsvpStatus}`);
 
@@ -338,13 +387,9 @@ export class InvitationService {
    * Check-in guest using QR code
    */
   async checkInGuest(qrCode: string): Promise<InvitationResponse> {
-    const invitation = await prisma.invitation.findUnique({
+    const invitation = await this.invitationRepository.findOne({
       where: { qrCode },
-      include: {
-        event: {
-          select: { title: true, eventDate: true },
-        },
-      },
+      relations: ['event'],
     });
 
     if (!invitation) {
@@ -369,10 +414,8 @@ export class InvitationService {
     }
 
     // Update check-in time
-    const updatedInvitation = await prisma.invitation.update({
-      where: { id: invitation.id },
-      data: { checkInTime: new Date() },
-    });
+    invitation.checkInTime = new Date();
+    const updatedInvitation = await this.invitationRepository.save(invitation);
 
     logger.info(`Guest checked in: ${invitation.id} - ${invitation.guestName}`);
 
@@ -383,13 +426,9 @@ export class InvitationService {
    * Resend invitation
    */
   async resendInvitation(invitationId: string, userId: string): Promise<{ message: string }> {
-    const invitation = await prisma.invitation.findUnique({
+    const invitation = await this.invitationRepository.findOne({
       where: { id: invitationId },
-      include: {
-        event: {
-          select: { userId: true, title: true, eventDate: true },
-        },
-      },
+      relations: ['event'],
     });
 
     if (!invitation) {
@@ -419,9 +458,9 @@ export class InvitationService {
     failed: Array<{ row: any; error: string }>;
   }> {
     // Verify event ownership
-    const event = await prisma.event.findUnique({
+    const event = await this.eventRepository.findOne({
       where: { id: eventId },
-      select: { userId: true },
+      select: ['userId'],
     });
 
     if (!event) {
@@ -504,9 +543,9 @@ export class InvitationService {
    */
   async exportGuestListToCSV(eventId: string, userId: string): Promise<string> {
     // Verify event ownership
-    const event = await prisma.event.findUnique({
+    const event = await this.eventRepository.findOne({
       where: { id: eventId },
-      select: { userId: true, title: true },
+      select: ['userId', 'title'],
     });
 
     if (!event) {
@@ -518,9 +557,9 @@ export class InvitationService {
     }
 
     // Get all invitations for the event
-    const invitations = await prisma.invitation.findMany({
+    const invitations = await this.invitationRepository.find({
       where: { eventId },
-      orderBy: { guestName: 'asc' },
+      order: { guestName: 'ASC' },
     });
 
     // Create CSV file
@@ -571,17 +610,9 @@ export class InvitationService {
     eventTitle: string,
     eventDate: Date
   ): Promise<void> {
-    const invitation = await prisma.invitation.findUnique({
+    const invitation = await this.invitationRepository.findOne({
       where: { id: invitationId },
-      include: {
-        event: {
-          include: {
-            user: {
-              select: { firstName: true, lastName: true, companyName: true },
-            },
-          },
-        },
-      },
+      relations: ['event', 'event.user'],
     });
 
     if (!invitation) {
@@ -636,21 +667,20 @@ export class InvitationService {
       }
 
       // Update invitation status
-      await prisma.invitation.update({
-        where: { id: invitationId },
-        data: {
+      await this.invitationRepository.save(
+        Object.assign(invitation, {
           sentAt: new Date(),
-          deliveryStatus: result && result[0]?.status === 'SENT' ? 'SENT' : 'FAILED',
-        },
-      });
+          deliveryStatus:
+            result && result[0]?.status === 'SENT' ? DeliveryStatus.SENT : DeliveryStatus.FAILED,
+        })
+      );
     } catch (error) {
       // Update invitation status as failed
-      await prisma.invitation.update({
-        where: { id: invitationId },
-        data: {
-          deliveryStatus: 'FAILED',
-        },
-      });
+      await this.invitationRepository.save(
+        Object.assign(invitation, {
+          deliveryStatus: DeliveryStatus.FAILED,
+        })
+      );
 
       logger.error(`Failed to send invitation ${invitationId}:`, error);
     }
@@ -667,30 +697,9 @@ export class InvitationService {
    * Get invitation by QR code (for public RSVP page)
    */
   async getInvitationByQR(qrCode: string): Promise<any> {
-    const invitation = await prisma.invitation.findUnique({
+    const invitation = await this.invitationRepository.findOne({
       where: { qrCode },
-      include: {
-        event: {
-          select: {
-            id: true,
-            title: true,
-            description: true,
-            eventDate: true,
-            startTime: true,
-            endTime: true,
-            venueName: true,
-            venueAddress: true,
-            venueCity: true,
-            user: {
-              select: {
-                firstName: true,
-                lastName: true,
-                companyName: true,
-              },
-            },
-          },
-        },
-      },
+      relations: ['event', 'event.user'],
     });
 
     if (!invitation) {
@@ -715,9 +724,9 @@ export class InvitationService {
    */
   async getInvitationStats(eventId: string, userId: string): Promise<any> {
     // Verify event ownership
-    const event = await prisma.event.findUnique({
+    const event = await this.eventRepository.findOne({
       where: { id: eventId },
-      select: { userId: true },
+      select: ['userId'],
     });
 
     if (!event) {
@@ -728,12 +737,18 @@ export class InvitationService {
       throw new AppError('Access denied to this event', 403, 'EVENT_ACCESS_DENIED');
     }
 
-    // Get invitation statistics
-    const stats = await prisma.invitation.groupBy({
-      by: ['rsvpStatus', 'deliveryStatus', 'invitationMethod'],
-      where: { eventId },
-      _count: true,
-    });
+    // Get invitation statistics using query builder
+    const stats = await this.invitationRepository
+      .createQueryBuilder('invitation')
+      .select([
+        'invitation.rsvpStatus',
+        'invitation.deliveryStatus',
+        'invitation.invitationMethod',
+        'COUNT(*) as count',
+      ])
+      .where('invitation.eventId = :eventId', { eventId })
+      .groupBy('invitation.rsvpStatus, invitation.deliveryStatus, invitation.invitationMethod')
+      .getRawMany();
 
     // Calculate totals
     const summary = {
@@ -753,32 +768,35 @@ export class InvitationService {
     };
 
     stats.forEach((stat: any) => {
-      summary.total += stat._count;
+      const count = parseInt(stat.count);
+      summary.total += count;
 
       // RSVP status
-      if (stat.rsvpStatus === 'ACCEPTED') summary.accepted += stat._count;
-      if (stat.rsvpStatus === 'DECLINED') summary.declined += stat._count;
-      if (stat.rsvpStatus === 'PENDING') summary.pending += stat._count;
+      if (stat.invitation_rsvpStatus === 'ACCEPTED') summary.accepted += count;
+      if (stat.invitation_rsvpStatus === 'DECLINED') summary.declined += count;
+      if (stat.invitation_rsvpStatus === 'PENDING') summary.pending += count;
 
       // Delivery status
-      if (stat.deliveryStatus === 'SENT') summary.sent += stat._count;
-      if (stat.deliveryStatus === 'DELIVERED') summary.delivered += stat._count;
-      if (stat.deliveryStatus === 'FAILED') summary.failed += stat._count;
+      if (stat.invitation_deliveryStatus === 'SENT') summary.sent += count;
+      if (stat.invitation_deliveryStatus === 'DELIVERED') summary.delivered += count;
+      if (stat.invitation_deliveryStatus === 'FAILED') summary.failed += count;
 
       // By method
-      const method = stat.invitationMethod.toLowerCase() as keyof typeof summary.byMethod;
+      const method =
+        stat.invitation_invitationMethod?.toLowerCase() as keyof typeof summary.byMethod;
       if (summary.byMethod[method]) {
-        if (stat.deliveryStatus === 'SENT') summary.byMethod[method].sent += stat._count;
-        if (stat.deliveryStatus === 'DELIVERED') summary.byMethod[method].delivered += stat._count;
-        if (stat.deliveryStatus === 'FAILED') summary.byMethod[method].failed += stat._count;
+        if (stat.invitation_deliveryStatus === 'SENT') summary.byMethod[method].sent += count;
+        if (stat.invitation_deliveryStatus === 'DELIVERED')
+          summary.byMethod[method].delivered += count;
+        if (stat.invitation_deliveryStatus === 'FAILED') summary.byMethod[method].failed += count;
       }
     });
 
     // Get check-in count
-    summary.checkedIn = await prisma.invitation.count({
+    summary.checkedIn = await this.invitationRepository.count({
       where: {
         eventId,
-        checkInTime: { not: null },
+        checkInTime: Not(IsNull()),
       },
     });
 
@@ -790,9 +808,9 @@ export class InvitationService {
    */
   async sendReminders(eventId: string, userId: string): Promise<{ sent: number; failed: number }> {
     // Verify event ownership
-    const event = await prisma.event.findUnique({
+    const event = await this.eventRepository.findOne({
       where: { id: eventId },
-      select: { userId: true, title: true, eventDate: true },
+      select: ['userId', 'title', 'eventDate'],
     });
 
     if (!event) {
@@ -804,12 +822,12 @@ export class InvitationService {
     }
 
     // Get pending invitations
-    const pendingInvitations = await prisma.invitation.findMany({
+    const pendingInvitations = await this.invitationRepository.find({
       where: {
         eventId,
-        rsvpStatus: 'PENDING',
-        deliveryStatus: { in: ['SENT', 'DELIVERED'] }, // Only resend to successfully delivered invitations
-      },
+        rsvpStatus: RSVPStatus.PENDING,
+        deliveryStatus: In([DeliveryStatus.SENT, DeliveryStatus.DELIVERED]),
+      }, // Only resend to successfully delivered invitations
     });
 
     let sent = 0;
@@ -834,13 +852,9 @@ export class InvitationService {
    * Delete invitation
    */
   async deleteInvitation(invitationId: string, userId: string): Promise<{ message: string }> {
-    const invitation = await prisma.invitation.findUnique({
+    const invitation = await this.invitationRepository.findOne({
       where: { id: invitationId },
-      include: {
-        event: {
-          select: { userId: true },
-        },
-      },
+      relations: ['event'],
     });
 
     if (!invitation) {
@@ -852,21 +866,19 @@ export class InvitationService {
     }
 
     // Update event RSVP count if invitation was accepted
-    if (invitation.rsvpStatus === 'ACCEPTED') {
-      await prisma.event.update({
-        where: { id: invitation.eventId },
-        data: {
-          currentRsvpCount: {
-            decrement: 1 + invitation.plusOneCount,
-          },
-        },
-      });
+    if (invitation.rsvpStatus === RSVPStatus.ACCEPTED) {
+      const event = await this.eventRepository.findOne({ where: { id: invitation.eventId } });
+      if (event) {
+        event.currentRsvpCount = Math.max(
+          0,
+          (event.currentRsvpCount || 0) - 1 - (invitation.plusOneCount || 0)
+        );
+        await this.eventRepository.save(event);
+      }
     }
 
     // Delete invitation
-    await prisma.invitation.delete({
-      where: { id: invitationId },
-    });
+    await this.invitationRepository.delete({ id: invitationId });
 
     logger.info(`Invitation deleted: ${invitationId}`);
 

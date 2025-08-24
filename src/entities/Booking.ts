@@ -18,45 +18,45 @@ import { Decoration } from './Decoration';
 @Entity('bookings')
 export class Booking {
   @PrimaryGeneratedColumn('uuid')
-  id: string;
+  id!: string;
 
   @Column({ name: 'user_id' })
-  userId: string;
+  userId!: string;
 
   @Column({
     type: 'varchar',
     enum: ServiceType,
     name: 'service_type',
   })
-  serviceType: ServiceType;
+  serviceType!: ServiceType;
 
   @Column({ name: 'service_id' })
-  serviceId: string;
+  serviceId!: string;
 
   @Column({ name: 'booking_date' })
-  bookingDate: Date;
+  bookingDate!: Date;
 
   @Column({ name: 'start_date', nullable: true })
-  startDate: Date;
+  startDate!: Date;
 
   @Column({ name: 'end_date', nullable: true })
-  endDate: Date;
+  endDate!: Date;
 
   @Column({ nullable: true })
-  guests: number;
+  guests!: number;
 
   @Column('decimal', { precision: 12, scale: 2, name: 'total_amount_tzs' })
-  totalAmountTzs: number;
+  totalAmountTzs!: number;
 
   @Column({ default: 'TZS' })
-  currency: string;
+  currency!: string;
 
   @Column({
     type: 'varchar',
     enum: BookingStatus,
     default: BookingStatus.PENDING,
   })
-  status: BookingStatus;
+  status!: BookingStatus;
 
   @Column({
     type: 'varchar',
@@ -64,48 +64,48 @@ export class Booking {
     name: 'payment_status',
     default: PaymentStatus.PENDING,
   })
-  paymentStatus: PaymentStatus;
+  paymentStatus!: PaymentStatus;
 
   @Column({ name: 'payment_method', nullable: true })
-  paymentMethod: string;
+  paymentMethod!: string;
 
   @Column({ name: 'transaction_id', nullable: true })
-  transactionId: string;
+  transactionId!: string;
 
   @Column({ name: 'special_requests', nullable: true })
-  specialRequests: string;
+  specialRequests!: string;
 
   @Column({ name: 'cancellation_reason', nullable: true })
-  cancellationReason: string;
+  cancellationReason!: string;
 
   @CreateDateColumn({ name: 'created_at' })
-  createdAt: Date;
+  createdAt!: Date;
 
   @UpdateDateColumn({ name: 'updated_at' })
-  updatedAt: Date;
+  updatedAt!: Date;
 
   // Relations
   @ManyToOne(() => User, user => user.bookings, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'user_id' })
-  user: User;
+  user!: User;
 
   @ManyToOne(() => Tour, tour => tour.bookings, { nullable: true })
   @JoinColumn({ name: 'service_id' })
-  tour: Tour;
+  tour!: Tour;
 
   @ManyToOne(() => Vehicle, vehicle => vehicle.bookings, { nullable: true })
   @JoinColumn({ name: 'service_id' })
-  vehicle: Vehicle;
+  vehicle!: Vehicle;
 
   @ManyToOne(() => Accommodation, accommodation => accommodation.bookings, { nullable: true })
   @JoinColumn({ name: 'service_id' })
-  accommodation: Accommodation;
+  accommodation!: Accommodation;
 
   @ManyToOne(() => Venue, venue => venue.bookings, { nullable: true })
   @JoinColumn({ name: 'service_id' })
-  venue: Venue;
+  venue!: Venue;
 
   @ManyToOne(() => Decoration, decoration => decoration.bookings, { nullable: true })
   @JoinColumn({ name: 'service_id' })
-  decoration: Decoration;
+  decoration!: Decoration;
 }

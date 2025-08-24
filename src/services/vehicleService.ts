@@ -1,4 +1,4 @@
-import { prisma } from '../config/database';
+import database from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import {
   VehicleResponse,
@@ -9,8 +9,20 @@ import {
   PaginationInfo,
 } from '../types';
 import logger from '../config/logger';
+import { Vehicle } from '../entities/Vehicle';
+import { Booking } from '../entities/Booking';
+import { BookingStatus, PaymentStatus, ServiceType } from '../entities/enums';
+import { Repository, Like, Between, MoreThanOrEqual, LessThanOrEqual } from 'typeorm';
 
 export class VehicleService {
+  private vehicleRepository: Repository<Vehicle>;
+  private bookingRepository: Repository<Booking>;
+
+  constructor() {
+    this.vehicleRepository = database.getRepository(Vehicle) as Repository<Vehicle>;
+    this.bookingRepository = database.getRepository(Booking) as Repository<Booking>;
+  }
+
   /**
    * Get all vehicles with filtering and pagination
    */
@@ -40,34 +52,53 @@ export class VehicleService {
       where.withDriver = withDriver;
     }
 
-    if (minPrice || maxPrice) {
-      where.dailyRateTzs = {};
-      if (minPrice) {
-        where.dailyRateTzs.gte = minPrice;
-      }
-      if (maxPrice) {
-        where.dailyRateTzs.lte = maxPrice;
-      }
+    if (minPrice && maxPrice) {
+      where.dailyRateTzs = Between(minPrice, maxPrice);
+    } else if (minPrice) {
+      where.dailyRateTzs = MoreThanOrEqual(minPrice);
+    } else if (maxPrice) {
+      where.dailyRateTzs = LessThanOrEqual(maxPrice);
     }
 
+    // For search, we'll need to handle it differently in TypeORM
+    const queryBuilder = this.vehicleRepository.createQueryBuilder('vehicle');
+
+    // Apply basic where conditions
+    Object.keys(where).forEach(key => {
+      if (key !== 'dailyRateTzs' || !search) {
+        queryBuilder.andWhere(`vehicle.${key} = :${key}`, { [key]: where[key] });
+      }
+    });
+
+    // Handle price range
+    if (minPrice && maxPrice) {
+      queryBuilder.andWhere('vehicle.dailyRateTzs BETWEEN :minPrice AND :maxPrice', {
+        minPrice,
+        maxPrice,
+      });
+    } else if (minPrice) {
+      queryBuilder.andWhere('vehicle.dailyRateTzs >= :minPrice', { minPrice });
+    } else if (maxPrice) {
+      queryBuilder.andWhere('vehicle.dailyRateTzs <= :maxPrice', { maxPrice });
+    }
+
+    // Handle search
     if (search) {
-      where.OR = [
-        { make: { contains: search, mode: 'insensitive' } },
-        { model: { contains: search, mode: 'insensitive' } },
-        { licensePlate: { contains: search, mode: 'insensitive' } },
-      ];
+      queryBuilder.andWhere(
+        '(vehicle.make ILIKE :search OR vehicle.model ILIKE :search OR vehicle.licensePlate ILIKE :search)',
+        { search: `%${search}%` }
+      );
     }
 
     // Get total count
-    const total = await prisma.vehicle.count({ where });
+    const total = await queryBuilder.getCount();
 
-    // Get vehicles
-    const vehicles = await prisma.vehicle.findMany({
-      where,
-      skip,
-      take: limit,
-      orderBy: { [sortBy]: sortOrder },
-    });
+    // Get vehicles with pagination and sorting
+    const vehicles = await queryBuilder
+      .orderBy(`vehicle.${sortBy}`, sortOrder.toUpperCase() as 'ASC' | 'DESC')
+      .skip(skip)
+      .take(limit)
+      .getMany();
 
     const formattedVehicles = vehicles.map(this.formatVehicleResponse);
 
@@ -90,7 +121,7 @@ export class VehicleService {
    * Get vehicle by ID
    */
   async getVehicleById(vehicleId: string): Promise<VehicleResponse> {
-    const vehicle = await prisma.vehicle.findUnique({
+    const vehicle = await this.vehicleRepository.findOne({
       where: { id: vehicleId },
     });
 
@@ -113,7 +144,7 @@ export class VehicleService {
     startDate: string,
     endDate: string
   ): Promise<{ available: boolean; conflictingBookings?: any[] }> {
-    const vehicle = await prisma.vehicle.findUnique({
+    const vehicle = await this.vehicleRepository.findOne({
       where: { id: vehicleId },
     });
 
@@ -125,24 +156,19 @@ export class VehicleService {
       return { available: false };
     }
 
-    // Check for conflicting bookings
-    const conflictingBookings = await prisma.booking.findMany({
-      where: {
-        serviceId: vehicleId,
-        serviceType: 'VEHICLE',
-        status: { in: ['PENDING', 'CONFIRMED'] },
-        OR: [
-          {
-            startDate: {
-              lte: new Date(endDate),
-            },
-            endDate: {
-              gte: new Date(startDate),
-            },
-          },
-        ],
-      },
-    });
+    // Check for conflicting bookings using TypeORM query builder
+    const conflictingBookings = await this.bookingRepository
+      .createQueryBuilder('booking')
+      .where('booking.serviceId = :vehicleId', { vehicleId })
+      .andWhere('booking.serviceType = :serviceType', { serviceType: ServiceType.VEHICLE })
+      .andWhere('booking.status IN (:...statuses)', {
+        statuses: [BookingStatus.PENDING, BookingStatus.CONFIRMED],
+      })
+      .andWhere('(booking.startDate <= :endDate AND booking.endDate >= :startDate)', {
+        startDate: new Date(startDate),
+        endDate: new Date(endDate),
+      })
+      .getMany();
 
     return {
       available: conflictingBookings.length === 0,
@@ -165,7 +191,7 @@ export class VehicleService {
     }
 
     // Verify vehicle exists and is available
-    const vehicle = await prisma.vehicle.findUnique({
+    const vehicle = await this.vehicleRepository.findOne({
       where: { id: serviceId },
     });
 
@@ -205,24 +231,24 @@ export class VehicleService {
     const totalAmountTzs = (dailyRate + driverRate) * days;
 
     // Create booking
-    const booking = await prisma.booking.create({
-      data: {
-        userId,
-        serviceType: 'VEHICLE',
-        serviceId,
-        bookingDate: new Date(bookingDate),
-        startDate: start,
-        endDate: end,
-        totalAmountTzs,
-        specialRequests,
-        status: 'PENDING',
-        paymentStatus: 'PENDING',
-      },
+    const booking = this.bookingRepository.create({
+      userId,
+      serviceType: ServiceType.VEHICLE,
+      serviceId,
+      bookingDate: new Date(bookingDate),
+      startDate: start,
+      endDate: end,
+      totalAmountTzs,
+      specialRequests,
+      status: BookingStatus.PENDING,
+      paymentStatus: PaymentStatus.PENDING,
     });
 
-    logger.info(`Vehicle booked: ${booking.id} for vehicle: ${serviceId} by user: ${userId}`);
+    const savedBooking = await this.bookingRepository.save(booking);
 
-    return this.formatBookingResponse(booking);
+    logger.info(`Vehicle booked: ${savedBooking.id} for vehicle: ${serviceId} by user: ${userId}`);
+
+    return this.formatBookingResponse(savedBooking);
   }
 
   /**
@@ -247,32 +273,19 @@ export class VehicleService {
     }
 
     // Get total count
-    const total = await prisma.booking.count({ where });
+    const total = await this.bookingRepository.count({ where });
 
-    // Get bookings with vehicle details
-    const bookings = await prisma.booking.findMany({
-      where,
-      skip,
-      take: limit,
-      orderBy: { [sortBy]: sortOrder },
-      include: {
-        vehicle: {
-          select: {
-            make: true,
-            model: true,
-            year: true,
-            vehicleType: true,
-            seatingCapacity: true,
-            transmission: true,
-            fuelType: true,
-            images: true,
-            withDriver: true,
-            location: true,
-            licensePlate: true,
-          },
-        },
-      },
-    });
+    // Get bookings with vehicle details using query builder
+    const bookings = await this.bookingRepository
+      .createQueryBuilder('booking')
+      .leftJoinAndSelect('booking.vehicle', 'vehicle')
+      .where('booking.userId = :userId', { userId })
+      .andWhere('booking.serviceType = :serviceType', { serviceType: ServiceType.VEHICLE })
+      .andWhere(filters?.status ? 'booking.status = :status' : '1=1', { status: filters?.status })
+      .orderBy(`booking.${sortBy}`, sortOrder.toUpperCase() as 'ASC' | 'DESC')
+      .skip(skip)
+      .take(limit)
+      .getMany();
 
     const formattedBookings = bookings.map((booking: any) => ({
       ...this.formatBookingResponse(booking),
@@ -303,7 +316,7 @@ export class VehicleService {
     updateData: { status?: string; paymentStatus?: string; specialRequests?: string }
   ): Promise<BookingResponse> {
     // Verify booking ownership
-    const booking = await prisma.booking.findUnique({
+    const booking = await this.bookingRepository.findOne({
       where: { id: bookingId },
     });
 
@@ -316,10 +329,8 @@ export class VehicleService {
     }
 
     // Update booking
-    const updatedBooking = await prisma.booking.update({
-      where: { id: bookingId },
-      data: updateData,
-    });
+    Object.assign(booking, updateData);
+    const updatedBooking = await this.bookingRepository.save(booking);
 
     logger.info(`Vehicle booking updated: ${bookingId} by user: ${userId}`);
 
@@ -331,7 +342,7 @@ export class VehicleService {
    */
   async cancelBooking(bookingId: string, userId: string): Promise<{ message: string }> {
     // Verify booking ownership
-    const booking = await prisma.booking.findUnique({
+    const booking = await this.bookingRepository.findOne({
       where: { id: bookingId },
     });
 
@@ -361,13 +372,9 @@ export class VehicleService {
     }
 
     // Update booking status
-    await prisma.booking.update({
-      where: { id: bookingId },
-      data: {
-        status: 'CANCELLED',
-        cancellationReason: 'Cancelled by user',
-      },
-    });
+    booking.status = BookingStatus.CANCELLED;
+    booking.cancellationReason = 'Cancelled by user';
+    await this.bookingRepository.save(booking);
 
     logger.info(`Vehicle booking cancelled: ${bookingId} by user: ${userId}`);
 
@@ -378,15 +385,17 @@ export class VehicleService {
    * Get vehicle types
    */
   async getVehicleTypes(): Promise<Array<{ type: string; count: number }>> {
-    const types = await prisma.vehicle.groupBy({
-      by: ['vehicleType'],
-      where: { availability: true },
-      _count: true,
-    });
+    const types = await this.vehicleRepository
+      .createQueryBuilder('vehicle')
+      .select('vehicle.vehicleType', 'type')
+      .addSelect('COUNT(*)', 'count')
+      .where('vehicle.availability = :availability', { availability: true })
+      .groupBy('vehicle.vehicleType')
+      .getRawMany();
 
     return types.map((type: any) => ({
-      type: type.vehicleType,
-      count: type._count,
+      type: type.type,
+      count: parseInt(type.count),
     }));
   }
 
@@ -394,13 +403,13 @@ export class VehicleService {
    * Get vehicles by location
    */
   async getVehiclesByLocation(location: string, limit: number = 10): Promise<VehicleResponse[]> {
-    const vehicles = await prisma.vehicle.findMany({
+    const vehicles = await this.vehicleRepository.find({
       where: {
         location: location as any,
         availability: true,
       },
       take: limit,
-      orderBy: { dailyRateTzs: 'asc' },
+      order: { dailyRateTzs: 'ASC' },
     });
 
     return vehicles.map(this.formatVehicleResponse);

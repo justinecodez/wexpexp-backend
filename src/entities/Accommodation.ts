@@ -12,69 +12,69 @@ import { Booking } from './Booking';
 @Entity('accommodations')
 export class Accommodation {
   @PrimaryGeneratedColumn('uuid')
-  id: string;
+  id!: string;
 
   @Column()
-  name: string;
+  name!: string;
 
   @Column({
     type: 'varchar',
     enum: AccommodationType,
   })
-  type: AccommodationType;
+  type!: AccommodationType;
 
   @Column({
     type: 'varchar',
     enum: TanzaniaCity,
   })
-  location: TanzaniaCity;
+  location!: TanzaniaCity;
 
   @Column({ nullable: true })
-  address: string;
+  address!: string;
 
   @Column({ nullable: true })
-  description: string;
+  description!: string;
 
   @Column('json')
-  roomTypes: any;
+  roomTypes!: any;
 
   @Column('json', { nullable: true })
-  amenities: string[];
+  amenities!: string[];
 
   @Column('json')
-  rates: any;
+  rates!: any;
 
   @Column('json', { nullable: true })
-  images: string[];
+  images!: string[];
 
   @Column('json', { nullable: true })
-  coordinates: { latitude: number; longitude: number };
+  coordinates!: { latitude: number; longitude: number };
 
   @Column({ name: 'check_in_time', nullable: true })
-  checkInTime: string;
+  checkInTime!: string;
 
   @Column({ name: 'check_out_time', nullable: true })
-  checkOutTime: string;
+  checkOutTime!: string;
 
   @Column('json', { nullable: true })
-  policies: any;
+  policies!: any;
 
   @Column('float', { nullable: true })
-  rating: number;
+  rating!: number;
 
   @Column({ name: 'total_rooms' })
-  totalRooms: number;
+  totalRooms!: number;
 
   @Column({ name: 'is_active', default: true })
-  isActive: boolean;
+  isActive!: boolean;
 
   @CreateDateColumn({ name: 'created_at' })
-  createdAt: Date;
+  createdAt!: Date;
 
   @UpdateDateColumn({ name: 'updated_at' })
-  updatedAt: Date;
+  updatedAt!: Date;
 
   // Relations
   @OneToMany(() => Booking, booking => booking.accommodation)
-  bookings: Booking[];
+  bookings!: Booking[];
 }

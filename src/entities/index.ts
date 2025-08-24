@@ -1,3 +1,4 @@
+// Entity classes for TypeORM
 export { User } from './User';
 export { Event } from './Event';
 export { Invitation } from './Invitation';
@@ -18,4 +19,48 @@ export { MessageLog } from './MessageLog';
 export { EventAnalytics } from './EventAnalytics';
 export { ECardTemplate } from './ECardTemplate';
 
+// Export enums separately
 export * from './enums';
+
+// Entity classes array for TypeORM configuration
+import { User } from './User';
+import { Event } from './Event';
+import { Invitation } from './Invitation';
+import { ECard } from './ECard';
+import { Tour } from './Tour';
+import { Vehicle } from './Vehicle';
+import { Accommodation } from './Accommodation';
+import { Venue } from './Venue';
+import { Decoration } from './Decoration';
+import { Booking } from './Booking';
+import { CarImportInquiry } from './CarImportInquiry';
+import { InsurancePlan } from './InsurancePlan';
+import { InsurancePolicy } from './InsurancePolicy';
+import { Budget } from './Budget';
+import { LandingPageContent } from './LandingPageContent';
+import { Notification } from './Notification';
+import { MessageLog } from './MessageLog';
+import { EventAnalytics } from './EventAnalytics';
+import { ECardTemplate } from './ECardTemplate';
+
+export const entityClasses = [
+  User,
+  Event,
+  Invitation,
+  ECard,
+  Tour,
+  Vehicle,
+  Accommodation,
+  Venue,
+  Decoration,
+  Booking,
+  CarImportInquiry,
+  InsurancePlan,
+  InsurancePolicy,
+  Budget,
+  LandingPageContent,
+  Notification,
+  MessageLog,
+  EventAnalytics,
+  ECardTemplate,
+];

@@ -60,8 +60,8 @@ export class AuthService {
     newUser.firstName = firstName;
     newUser.lastName = lastName;
     newUser.phone = phone ? validateTanzanianPhone(phone).formatted : null;
-    newUser.companyName = companyName;
-    newUser.businessType = businessType as BusinessType;
+    newUser.companyName = companyName || null;
+    newUser.businessType = (businessType as BusinessType) || null;
 
     const savedUser = await userRepository.save(newUser);
 
@@ -71,12 +71,12 @@ export class AuthService {
       email: savedUser.email,
       firstName: savedUser.firstName,
       lastName: savedUser.lastName,
-      phone: savedUser.phone,
+      phone: savedUser.phone || undefined,
       role: savedUser.role,
       isVerified: savedUser.isVerified,
-      profileImage: savedUser.profileImage,
-      companyName: savedUser.companyName,
-      businessType: savedUser.businessType,
+      profileImage: savedUser.profileImage || undefined,
+      companyName: savedUser.companyName || undefined,
+      businessType: savedUser.businessType || undefined,
       createdAt: savedUser.createdAt,
     };
 
@@ -128,12 +128,12 @@ export class AuthService {
       email: user.email,
       firstName: user.firstName,
       lastName: user.lastName,
-      phone: user.phone,
+      phone: user.phone || undefined,
       role: user.role,
       isVerified: user.isVerified,
-      profileImage: user.profileImage,
-      companyName: user.companyName,
-      businessType: user.businessType,
+      profileImage: user.profileImage || undefined,
+      companyName: user.companyName || undefined,
+      businessType: user.businessType || undefined,
       createdAt: user.createdAt,
     };
 

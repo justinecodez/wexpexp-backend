@@ -12,57 +12,57 @@ import { Booking } from './Booking';
 @Entity('venues')
 export class Venue {
   @PrimaryGeneratedColumn('uuid')
-  id: string;
+  id!: string;
 
   @Column()
-  name: string;
+  name!: string;
 
   @Column({
     type: 'varchar',
     enum: TanzaniaCity,
   })
-  location: TanzaniaCity;
+  location!: TanzaniaCity;
 
   @Column({ nullable: true })
-  address: string;
+  address!: string;
 
   @Column()
-  capacity: number;
+  capacity!: number;
 
   @Column('decimal', { precision: 12, scale: 2, name: 'price_per_event_tzs' })
-  pricePerEventTzs: number;
+  pricePerEventTzs!: number;
 
   @Column('json', { nullable: true })
-  amenities: string[];
+  amenities!: string[];
 
   @Column({ name: 'venue_type' })
-  venueType: string;
+  venueType!: string;
 
   @Column('json', { nullable: true })
-  images: string[];
+  images!: string[];
 
   @Column('json', { nullable: true })
-  coordinates: { latitude: number; longitude: number };
+  coordinates!: { latitude: number; longitude: number };
 
   @Column('json', { name: 'available_services', nullable: true })
-  availableServices: string[];
+  availableServices!: string[];
 
   @Column('json', { nullable: true })
-  contact: any;
+  contact!: any;
 
   @Column('json', { name: 'working_hours', nullable: true })
-  workingHours: any;
+  workingHours!: any;
 
   @Column({ name: 'is_active', default: true })
-  isActive: boolean;
+  isActive!: boolean;
 
   @CreateDateColumn({ name: 'created_at' })
-  createdAt: Date;
+  createdAt!: Date;
 
   @UpdateDateColumn({ name: 'updated_at' })
-  updatedAt: Date;
+  updatedAt!: Date;
 
   // Relations
   @OneToMany(() => Booking, booking => booking.venue)
-  bookings: Booking[];
+  bookings!: Booking[];
 }

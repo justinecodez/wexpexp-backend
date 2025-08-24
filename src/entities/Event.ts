@@ -16,41 +16,41 @@ import { ECard } from './ECard';
 @Entity('events')
 export class Event {
   @PrimaryGeneratedColumn('uuid')
-  id: string;
+  id!: string;
 
   @Column({ name: 'user_id' })
-  userId: string;
+  userId!: string;
 
   @Column()
-  title: string;
+  title!: string;
 
   @Column({ nullable: true })
-  description: string;
+  description!: string;
 
   @Column({
     type: 'varchar',
     enum: EventType,
     name: 'event_type',
   })
-  eventType: EventType;
+  eventType!: EventType;
 
   @Column({ name: 'event_date' })
-  eventDate: Date;
+  eventDate!: Date;
 
   @Column({ name: 'start_time' })
-  startTime: string;
+  startTime!: string;
 
   @Column({ name: 'end_time', nullable: true })
-  endTime: string;
+  endTime!: string;
 
   @Column({ default: 'Africa/Dar_es_Salaam' })
-  timezone: string;
+  timezone!: string;
 
   @Column({ name: 'venue_name', nullable: true })
-  venueName: string;
+  venueName!: string;
 
   @Column({ name: 'venue_address', nullable: true })
-  venueAddress: string;
+  venueAddress!: string;
 
   @Column({
     type: 'varchar',
@@ -58,44 +58,44 @@ export class Event {
     name: 'venue_city',
     nullable: true,
   })
-  venueCity: TanzaniaCity;
+  venueCity!: TanzaniaCity;
 
   @Column({ name: 'max_guests' })
-  maxGuests: number;
+  maxGuests!: number;
 
   @Column({ name: 'current_rsvp_count', default: 0 })
-  currentRsvpCount: number;
+  currentRsvpCount!: number;
 
   @Column('decimal', { precision: 12, scale: 2, nullable: true })
-  budget: number;
+  budget!: number;
 
   @Column({ default: 'TZS' })
-  currency: string;
+  currency!: string;
 
   @Column({
     type: 'varchar',
     enum: EventStatus,
     default: EventStatus.DRAFT,
   })
-  status: EventStatus;
+  status!: EventStatus;
 
   @Column({ name: 'is_public', default: false })
-  isPublic: boolean;
+  isPublic!: boolean;
 
   @CreateDateColumn({ name: 'created_at' })
-  createdAt: Date;
+  createdAt!: Date;
 
   @UpdateDateColumn({ name: 'updated_at' })
-  updatedAt: Date;
+  updatedAt!: Date;
 
   // Relations
   @ManyToOne(() => User, user => user.events, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'user_id' })
-  user: User;
+  user!: User;
 
   @OneToMany(() => Invitation, invitation => invitation.event)
-  invitations: Invitation[];
+  invitations!: Invitation[];
 
   @OneToMany(() => ECard, ecard => ecard.event)
-  eCards: ECard[];
+  eCards!: ECard[];
 }

@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
-import { Prisma } from '@prisma/client';
+import { QueryFailedError, EntityNotFoundError } from 'typeorm';
 import logger from '../config/logger';
 import { ApiResponse } from '../types';
 
@@ -65,35 +65,52 @@ const handleZodError = (err: ZodError): AppError => {
   return new AppError(message, 400, 'VALIDATION_ERROR');
 };
 
-const handlePrismaValidationError = (err: any): AppError => {
-  const message = 'Invalid data provided';
-  return new AppError(message, 400, 'INVALID_DATA');
+const handleTypeOrmQueryFailedError = (err: QueryFailedError): AppError => {
+  // Handle SQLite/Database specific errors
+  const sqliteError = err as any;
+
+  // Unique constraint violation
+  if (
+    sqliteError.code === 'SQLITE_CONSTRAINT_UNIQUE' ||
+    err.message.includes('UNIQUE constraint failed')
+  ) {
+    const match = err.message.match(/UNIQUE constraint failed: (\w+)\.(\w+)/);
+    const field = match ? match[2] : 'field';
+    const message = `${field.charAt(0).toUpperCase() + field.slice(1)} already exists`;
+    return new AppError(message, 409, 'DUPLICATE_ENTRY');
+  }
+
+  // Foreign key constraint violation
+  if (
+    sqliteError.code === 'SQLITE_CONSTRAINT_FOREIGNKEY' ||
+    err.message.includes('FOREIGN KEY constraint failed')
+  ) {
+    return new AppError('Related record not found', 400, 'FOREIGN_KEY_VIOLATION');
+  }
+
+  // Check constraint violation
+  if (
+    sqliteError.code === 'SQLITE_CONSTRAINT_CHECK' ||
+    err.message.includes('CHECK constraint failed')
+  ) {
+    return new AppError('Invalid data provided', 400, 'CHECK_CONSTRAINT_VIOLATION');
+  }
+
+  // Not null constraint violation
+  if (
+    sqliteError.code === 'SQLITE_CONSTRAINT_NOTNULL' ||
+    err.message.includes('NOT NULL constraint failed')
+  ) {
+    const match = err.message.match(/NOT NULL constraint failed: (\w+)\.(\w+)/);
+    const field = match ? match[2] : 'field';
+    return new AppError(`${field} is required`, 400, 'REQUIRED_FIELD');
+  }
+
+  return new AppError('Database operation failed', 500, 'DATABASE_ERROR');
 };
 
-const handlePrismaKnownRequestError = (err: any): AppError => {
-  switch (err.code) {
-    case 'P2002':
-      // Unique constraint violation
-      const target = err.meta?.target as string[];
-      const field = target ? target[0] : 'field';
-      const message = `${field.charAt(0).toUpperCase() + field.slice(1)} already exists`;
-      return new AppError(message, 409, 'DUPLICATE_ENTRY');
-
-    case 'P2025':
-      // Record not found
-      return new AppError('Record not found', 404, 'NOT_FOUND');
-
-    case 'P2003':
-      // Foreign key constraint violation
-      return new AppError('Related record not found', 400, 'FOREIGN_KEY_VIOLATION');
-
-    case 'P2014':
-      // Relation violation
-      return new AppError('Invalid relation data', 400, 'RELATION_VIOLATION');
-
-    default:
-      return new AppError('Database operation failed', 500, 'DATABASE_ERROR');
-  }
+const handleTypeOrmEntityNotFoundError = (err: EntityNotFoundError): AppError => {
+  return new AppError('Record not found', 404, 'NOT_FOUND');
 };
 
 const handleJWTError = (): AppError =>
@@ -124,13 +141,13 @@ export const errorHandler = (err: any, req: Request, res: Response, next: NextFu
     error = handleZodError(err);
   }
 
-  // Prisma errors
-  if (err.name === 'PrismaClientValidationError') {
-    error = handlePrismaValidationError(err);
+  // TypeORM errors
+  if (err instanceof QueryFailedError) {
+    error = handleTypeOrmQueryFailedError(err);
   }
 
-  if (err.name === 'PrismaClientKnownRequestError') {
-    error = handlePrismaKnownRequestError(err);
+  if (err instanceof EntityNotFoundError) {
+    error = handleTypeOrmEntityNotFoundError(err);
   }
 
   // JWT errors

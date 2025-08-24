@@ -1,5 +1,8 @@
 import nodemailer from 'nodemailer';
-import { prisma } from '../config/database';
+import database from '../config/database';
+import { MessageLog } from '../entities/MessageLog';
+import { InvitationMethod, DeliveryStatus } from '../entities/enums';
+import { Repository } from 'typeorm';
 import config from '../config';
 import { AppError } from '../middleware/errorHandler';
 import { validateTanzanianPhone } from '../utils/tanzania';
@@ -8,8 +11,10 @@ import logger from '../config/logger';
 
 export class CommunicationService {
   private emailTransporter!: nodemailer.Transporter;
+  private messageLogRepository: Repository<MessageLog>;
 
   constructor() {
+    this.messageLogRepository = database.getRepository(MessageLog) as Repository<MessageLog>;
     this.setupEmailTransporter();
   }
 
@@ -58,43 +63,43 @@ export class CommunicationService {
         const info = await this.emailTransporter.sendMail(mailOptions);
 
         // Log message
-        const messageLog = await prisma.messageLog.create({
-          data: {
+        const messageLog = await this.messageLogRepository.save(
+          this.messageLogRepository.create({
             recipientType: 'email',
             recipient,
-            method: 'EMAIL',
+            method: InvitationMethod.EMAIL,
             subject: emailData.subject,
             content: emailData.html || emailData.text || '',
-            status: 'SENT',
+            status: DeliveryStatus.SENT,
             deliveredAt: new Date(),
             metadata: { messageId: info.messageId },
-          },
-        });
+          })
+        );
 
         results.push({
           id: messageLog.id,
-          status: 'SENT',
+          status: DeliveryStatus.SENT,
           deliveredAt: new Date(),
         });
 
         logger.info(`Email sent to ${recipient}`);
       } catch (error) {
         // Log failed message
-        const messageLog = await prisma.messageLog.create({
-          data: {
+        const messageLog = await this.messageLogRepository.save(
+          this.messageLogRepository.create({
             recipientType: 'email',
             recipient,
-            method: 'EMAIL',
+            method: InvitationMethod.EMAIL,
             subject: emailData.subject,
             content: emailData.html || emailData.text || '',
-            status: 'FAILED',
+            status: DeliveryStatus.FAILED,
             errorMessage: error instanceof Error ? error.message : 'Unknown error',
-          },
-        });
+          })
+        );
 
         results.push({
           id: messageLog.id,
-          status: 'FAILED',
+          status: DeliveryStatus.FAILED,
           errorMessage: error instanceof Error ? error.message : 'Unknown error',
         });
 
@@ -133,21 +138,20 @@ export class CommunicationService {
         }
 
         // Log message
-        const messageLog = await prisma.messageLog.create({
-          data: {
-            recipientType: 'phone',
-            recipient: formattedPhone,
-            method: 'SMS',
-            content: smsData.message,
-            status: response.success ? 'SENT' : 'FAILED',
-            deliveredAt: response.success ? new Date() : null,
-            errorMessage: response.success ? null : response.error,
-            metadata: response.metadata,
-          },
-        });
+        const messageLogData = {
+          recipientType: 'phone',
+          recipient: formattedPhone,
+          method: InvitationMethod.SMS,
+          content: smsData.message,
+          status: response.success ? DeliveryStatus.SENT : DeliveryStatus.FAILED,
+          deliveredAt: response.success ? new Date() : undefined,
+          errorMessage: response.success ? undefined : response.error,
+          metadata: response.metadata,
+        };
+        const savedMessageLog = await this.messageLogRepository.save(messageLogData);
 
         results.push({
-          id: messageLog.id,
+          id: savedMessageLog.id,
           status: response.success ? 'SENT' : 'FAILED',
           deliveredAt: response.success ? new Date() : undefined,
           errorMessage: response.success ? undefined : response.error,
@@ -156,20 +160,20 @@ export class CommunicationService {
         logger.info(`SMS ${response.success ? 'sent' : 'failed'} to ${formattedPhone}`);
       } catch (error) {
         // Log failed message
-        const messageLog = await prisma.messageLog.create({
-          data: {
+        const messageLog = await this.messageLogRepository.save(
+          this.messageLogRepository.create({
             recipientType: 'phone',
             recipient,
-            method: 'SMS',
+            method: InvitationMethod.SMS,
             content: smsData.message,
-            status: 'FAILED',
+            status: DeliveryStatus.FAILED,
             errorMessage: error instanceof Error ? error.message : 'Unknown error',
-          },
-        });
+          })
+        );
 
         results.push({
           id: messageLog.id,
-          status: 'FAILED',
+          status: DeliveryStatus.FAILED,
           errorMessage: error instanceof Error ? error.message : 'Unknown error',
         });
 
@@ -199,21 +203,20 @@ export class CommunicationService {
         const response = await this.sendWhatsAppMessage(formattedPhone, whatsappData);
 
         // Log message
-        const messageLog = await prisma.messageLog.create({
-          data: {
-            recipientType: 'phone',
-            recipient: phoneValidation.formatted,
-            method: 'WHATSAPP',
-            content: whatsappData.message,
-            status: response.success ? 'SENT' : 'FAILED',
-            deliveredAt: response.success ? new Date() : null,
-            errorMessage: response.success ? null : response.error,
-            metadata: response.metadata,
-          },
-        });
+        const messageLogData = {
+          recipientType: 'phone',
+          recipient: phoneValidation.formatted,
+          method: InvitationMethod.WHATSAPP,
+          content: whatsappData.message,
+          status: response.success ? DeliveryStatus.SENT : DeliveryStatus.FAILED,
+          deliveredAt: response.success ? new Date() : undefined,
+          errorMessage: response.success ? undefined : response.error,
+          metadata: response.metadata,
+        };
+        const savedMessageLog = await this.messageLogRepository.save(messageLogData);
 
         results.push({
-          id: messageLog.id,
+          id: savedMessageLog.id,
           status: response.success ? 'SENT' : 'FAILED',
           deliveredAt: response.success ? new Date() : undefined,
           errorMessage: response.success ? undefined : response.error,
@@ -224,20 +227,20 @@ export class CommunicationService {
         );
       } catch (error) {
         // Log failed message
-        const messageLog = await prisma.messageLog.create({
-          data: {
+        const messageLog = await this.messageLogRepository.save(
+          this.messageLogRepository.create({
             recipientType: 'phone',
             recipient,
-            method: 'WHATSAPP',
+            method: InvitationMethod.WHATSAPP,
             content: whatsappData.message,
-            status: 'FAILED',
+            status: DeliveryStatus.FAILED,
             errorMessage: error instanceof Error ? error.message : 'Unknown error',
-          },
-        });
+          })
+        );
 
         results.push({
           id: messageLog.id,
-          status: 'FAILED',
+          status: DeliveryStatus.FAILED,
           errorMessage: error instanceof Error ? error.message : 'Unknown error',
         });
 
@@ -354,7 +357,7 @@ export class CommunicationService {
    * Get message delivery status
    */
   async getDeliveryStatus(messageId: string): Promise<MessageResponse> {
-    const message = await prisma.messageLog.findUnique({
+    const message = await this.messageLogRepository.findOne({
       where: { id: messageId },
     });
 

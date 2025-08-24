@@ -12,60 +12,60 @@ import { Booking } from './Booking';
 @Entity('tours')
 export class Tour {
   @PrimaryGeneratedColumn('uuid')
-  id: string;
+  id!: string;
 
   @Column()
-  name: string;
+  name!: string;
 
   @Column()
-  description: string;
+  description!: string;
 
   @Column()
-  duration: string;
+  duration!: string;
 
   @Column('decimal', { precision: 12, scale: 2, name: 'price_tzs' })
-  priceTzs: number;
+  priceTzs!: number;
 
   @Column({
     type: 'varchar',
     enum: TanzaniaCity,
   })
-  location: TanzaniaCity;
+  location!: TanzaniaCity;
 
   @Column({
     type: 'varchar',
     enum: TourCategory,
   })
-  category: TourCategory;
+  category!: TourCategory;
 
   @Column('json', { nullable: true })
-  images: string[];
+  images!: string[];
 
   @Column('json', { nullable: true })
-  itinerary: any;
+  itinerary!: any;
 
   @Column('json', { nullable: true })
-  inclusions: string[];
+  inclusions!: string[];
 
   @Column('json', { nullable: true })
-  exclusions: string[];
+  exclusions!: string[];
 
   @Column({ name: 'max_people' })
-  maxPeople: number;
+  maxPeople!: number;
 
   @Column({ nullable: true })
-  difficulty: string;
+  difficulty!: string;
 
   @Column({ name: 'is_active', default: true })
-  isActive: boolean;
+  isActive!: boolean;
 
   @CreateDateColumn({ name: 'created_at' })
-  createdAt: Date;
+  createdAt!: Date;
 
   @UpdateDateColumn({ name: 'updated_at' })
-  updatedAt: Date;
+  updatedAt!: Date;
 
   // Relations
   @OneToMany(() => Booking, booking => booking.tour)
-  bookings: Booking[];
+  bookings!: Booking[];
 }

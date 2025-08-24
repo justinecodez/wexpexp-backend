@@ -12,34 +12,34 @@ import { User } from './User';
 @Entity('notifications')
 export class Notification {
   @PrimaryGeneratedColumn('uuid')
-  id: string;
+  id!: string;
 
   @Column({ name: 'user_id' })
-  userId: string;
+  userId!: string;
 
   @Column({
     type: 'varchar',
     enum: NotificationType,
   })
-  type: NotificationType;
+  type!: NotificationType;
 
   @Column()
-  title: string;
+  title!: string;
 
   @Column()
-  message: string;
+  message!: string;
 
   @Column('json', { nullable: true })
-  data: any;
+  data!: any;
 
   @Column({ name: 'is_read', default: false })
-  isRead: boolean;
+  isRead!: boolean;
 
   @CreateDateColumn({ name: 'created_at' })
-  createdAt: Date;
+  createdAt!: Date;
 
   // Relations
   @ManyToOne(() => User, user => user.notifications, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'user_id' })
-  user: User;
+  user!: User;
 }

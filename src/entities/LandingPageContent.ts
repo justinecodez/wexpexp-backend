@@ -12,28 +12,28 @@ import { User } from './User';
 @Entity('landing_page_content')
 export class LandingPageContent {
   @PrimaryGeneratedColumn('uuid')
-  id: string;
+  id!: string;
 
   @Column({ name: 'section_type' })
-  sectionType: string;
+  sectionType!: string;
 
   @Column('json', { name: 'content_data' })
-  contentData: any;
+  contentData!: any;
 
   @Column({ name: 'is_active', default: true })
-  isActive: boolean;
+  isActive!: boolean;
 
   @Column({ name: 'updated_by' })
-  updatedBy: string;
+  updatedBy!: string;
 
   @CreateDateColumn({ name: 'created_at' })
-  createdAt: Date;
+  createdAt!: Date;
 
   @UpdateDateColumn({ name: 'updated_at' })
-  updatedAt: Date;
+  updatedAt!: Date;
 
   // Relations
   @ManyToOne(() => User, user => user.landingContent)
   @JoinColumn({ name: 'updated_by' })
-  updater: User;
+  updater!: User;
 }

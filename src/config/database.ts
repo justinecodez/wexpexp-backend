@@ -3,7 +3,7 @@ import { DataSource, DataSourceOptions } from 'typeorm';
 import path from 'path';
 import config from './index';
 import logger from './logger';
-import * as entities from '../entities';
+import { entityClasses } from '../entities';
 
 // Database configuration
 const dataSourceOptions: DataSourceOptions = {
@@ -11,7 +11,7 @@ const dataSourceOptions: DataSourceOptions = {
   database: path.join(process.cwd(), 'database.sqlite'),
   synchronize: config.nodeEnv === 'development', // Only in development
   logging: config.nodeEnv === 'development',
-  entities: Object.values(entities),
+  entities: entityClasses,
   migrations: [path.join(__dirname, '../migrations/*.ts')],
   subscribers: [path.join(__dirname, '../subscribers/*.ts')],
   migrationsTableName: 'typeorm_migrations',

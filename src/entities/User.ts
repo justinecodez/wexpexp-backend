@@ -18,41 +18,41 @@ import { InsurancePolicy } from './InsurancePolicy';
 @Entity('users')
 export class User {
   @PrimaryGeneratedColumn('uuid')
-  id: string;
+  id!: string;
 
   @Column({ unique: true })
-  email: string;
+  email!: string;
 
   @Column({ name: 'password_hash' })
-  passwordHash: string;
+  passwordHash!: string;
 
   @Column({ name: 'first_name' })
-  firstName: string;
+  firstName!: string;
 
   @Column({ name: 'last_name' })
-  lastName: string;
+  lastName!: string;
 
   @Column({ unique: true, nullable: true })
-  phone: string;
+  phone!: string | null;
 
   @Column({
     type: 'varchar',
     enum: UserRole,
     default: UserRole.USER,
   })
-  role: UserRole;
+  role!: UserRole;
 
   @Column({ name: 'is_verified', default: false })
-  isVerified: boolean;
+  isVerified!: boolean;
 
   @Column({ name: 'email_verified_at', nullable: true })
-  emailVerifiedAt: Date;
+  emailVerifiedAt!: Date;
 
   @Column({ name: 'profile_image', nullable: true })
-  profileImage: string;
+  profileImage!: string;
 
   @Column({ name: 'company_name', nullable: true })
-  companyName: string;
+  companyName!: string | null;
 
   @Column({
     type: 'varchar',
@@ -60,42 +60,42 @@ export class User {
     name: 'business_type',
     nullable: true,
   })
-  businessType: BusinessType;
+  businessType!: BusinessType | null;
 
   @Column({ name: 'refresh_token', nullable: true })
-  refreshToken: string;
+  refreshToken!: string;
 
   @Column({ name: 'reset_token', nullable: true })
-  resetToken: string;
+  resetToken!: string;
 
   @Column({ name: 'reset_token_expiry', nullable: true })
-  resetTokenExpiry: Date;
+  resetTokenExpiry!: Date;
 
   @CreateDateColumn({ name: 'created_at' })
-  createdAt: Date;
+  createdAt!: Date;
 
   @UpdateDateColumn({ name: 'updated_at' })
-  updatedAt: Date;
+  updatedAt!: Date;
 
   // Relations
   @OneToMany(() => Event, event => event.user)
-  events: Event[];
+  events!: Event[];
 
   @OneToMany(() => Booking, booking => booking.user)
-  bookings: Booking[];
+  bookings!: Booking[];
 
   @OneToMany(() => Notification, notification => notification.user)
-  notifications: Notification[];
+  notifications!: Notification[];
 
   @OneToMany(() => LandingPageContent, content => content.updater)
-  landingContent: LandingPageContent[];
+  landingContent!: LandingPageContent[];
 
   @OneToMany(() => Budget, budget => budget.user)
-  budgets: Budget[];
+  budgets!: Budget[];
 
   @OneToMany(() => CarImportInquiry, inquiry => inquiry.user)
-  carImportInquiries: CarImportInquiry[];
+  carImportInquiries!: CarImportInquiry[];
 
   @OneToMany(() => InsurancePolicy, policy => policy.user)
-  insurancePolicies: InsurancePolicy[];
+  insurancePolicies!: InsurancePolicy[];
 }
