@@ -19,10 +19,12 @@ import eventRoutes from './routes/events';
 import invitationRoutes from './routes/invitations';
 import tourRoutes from './routes/tours';
 import vehicleRoutes from './routes/vehicles';
+import testRoutes from './routes/test';
 // Other routes will be added as needed
 
 // Import Socket.IO service
 import SocketService from './services/socketService';
+import communicationService from './services/communicationService';
 
 class App {
   public app: express.Application;
@@ -101,14 +103,40 @@ class App {
     // Health check endpoint
     this.app.get('/health', async (req, res) => {
       const isDbHealthy = await database.healthCheck();
+      const emailHealth = await communicationService.emailHealthCheck();
 
-      res.status(isDbHealthy ? 200 : 503).json({
-        success: isDbHealthy,
-        message: isDbHealthy ? 'Service is healthy' : 'Service is unhealthy',
+      const overallHealthy = isDbHealthy && emailHealth.healthy;
+
+      res.status(overallHealthy ? 200 : 503).json({
+        success: overallHealthy,
+        message: overallHealthy ? 'All services are healthy' : 'Some services are unhealthy',
         timestamp: new Date().toISOString(),
         uptime: process.uptime(),
         environment: config.nodeEnv,
-        database: isDbHealthy ? 'connected' : 'disconnected',
+        services: {
+          database: {
+            status: isDbHealthy ? 'healthy' : 'unhealthy',
+            message: isDbHealthy ? 'Connected' : 'Disconnected',
+          },
+          email: {
+            status: emailHealth.healthy ? 'healthy' : 'unhealthy',
+            message: emailHealth.message,
+            details: emailHealth.details,
+          },
+        },
+      });
+    });
+
+    // Email health check endpoint
+    this.app.get('/health/email', async (req, res) => {
+      const emailHealth = await communicationService.emailHealthCheck();
+
+      res.status(emailHealth.healthy ? 200 : 503).json({
+        success: emailHealth.healthy,
+        message: emailHealth.message,
+        timestamp: new Date().toISOString(),
+        service: 'email',
+        details: emailHealth.details,
       });
     });
 
@@ -147,6 +175,7 @@ class App {
     this.app.use('/api/invitations', invitationRoutes);
     this.app.use('/api/tours', tourRoutes);
     this.app.use('/api/vehicles', vehicleRoutes);
+    this.app.use('/api/test', testRoutes);
 
     // Routes to be implemented later
     // this.app.use('/api/users', userRoutes);

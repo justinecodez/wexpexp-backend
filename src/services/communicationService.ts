@@ -5,7 +5,7 @@ import { InvitationMethod, DeliveryStatus } from '../entities/enums';
 import { Repository } from 'typeorm';
 import config from '../config';
 import { AppError } from '../middleware/errorHandler';
-import { validateTanzanianPhone } from '../utils/tanzania';
+
 import { EmailRequest, SMSRequest, WhatsAppRequest, MessageResponse } from '../types';
 import logger from '../config/logger';
 
@@ -22,24 +22,43 @@ export class CommunicationService {
    * Setup email transporter
    */
   private setupEmailTransporter(): void {
-    this.emailTransporter = nodemailer.createTransport({
-      host: config.smtp.host,
-      port: config.smtp.port,
-      secure: config.smtp.port === 465,
-      auth: {
-        user: config.smtp.user,
-        pass: config.smtp.pass,
-      },
-    });
+    try {
+      this.emailTransporter = nodemailer.createTransport({
+        host: config.smtp.host,
+        port: config.smtp.port,
+        secure: config.smtp.port === 465, // true for 465, false for other ports
+        auth: {
+          user: config.smtp.user,
+          pass: config.smtp.pass,
+        },
+        tls: {
+          rejectUnauthorized: false, // Allow self-signed certificates
+        },
+        connectionTimeout: 10000, // 10 seconds
+        greetingTimeout: 5000, // 5 seconds
+        socketTimeout: 30000, // 30 seconds
+      });
 
-    // Verify connection
-    this.emailTransporter.verify((error, success) => {
-      if (error) {
-        logger.error('Email transporter verification failed:', error);
-      } else {
-        logger.info('Email transporter is ready');
-      }
-    });
+      // Verify connection (but don't block app startup)
+      this.emailTransporter.verify((error, success) => {
+        if (error) {
+          logger.error('Email transporter verification failed:', {
+            message: error.message,
+            host: config.smtp.host,
+            port: config.smtp.port,
+            user: config.smtp.user,
+          });
+        } else {
+          logger.info('Email transporter is ready');
+        }
+      });
+    } catch (error) {
+      logger.error('Failed to setup email transporter:', {
+        message: error instanceof Error ? error.message : 'Unknown error',
+        host: config.smtp.host,
+        port: config.smtp.port,
+      });
+    }
   }
 
   /**
@@ -119,13 +138,8 @@ export class CommunicationService {
 
     for (const recipient of recipients) {
       try {
-        // Validate phone number
-        const phoneValidation = validateTanzanianPhone(recipient);
-        if (!phoneValidation.isValid) {
-          throw new AppError('Invalid Tanzanian phone number', 400, 'INVALID_PHONE');
-        }
-
-        const formattedPhone = phoneValidation.formatted;
+        // Use phone number as provided (no validation)
+        const formattedPhone = recipient.trim();
         let response;
 
         // Choose SMS provider based on configuration
@@ -193,19 +207,14 @@ export class CommunicationService {
 
     for (const recipient of recipients) {
       try {
-        // Validate phone number
-        const phoneValidation = validateTanzanianPhone(recipient);
-        if (!phoneValidation.isValid) {
-          throw new AppError('Invalid Tanzanian phone number', 400, 'INVALID_PHONE');
-        }
-
-        const formattedPhone = phoneValidation.formatted.replace('+', ''); // Remove + for WhatsApp API
+        // Use phone number as provided (no validation)
+        const formattedPhone = recipient.trim().replace('+', ''); // Remove + for WhatsApp API
         const response = await this.sendWhatsAppMessage(formattedPhone, whatsappData);
 
         // Log message
         const messageLogData = {
           recipientType: 'phone',
-          recipient: phoneValidation.formatted,
+          recipient: recipient.trim(),
           method: InvitationMethod.WHATSAPP,
           content: whatsappData.message,
           status: response.success ? DeliveryStatus.SENT : DeliveryStatus.FAILED,
@@ -222,9 +231,7 @@ export class CommunicationService {
           errorMessage: response.success ? undefined : response.error,
         });
 
-        logger.info(
-          `WhatsApp ${response.success ? 'sent' : 'failed'} to ${phoneValidation.formatted}`
-        );
+        logger.info(`WhatsApp ${response.success ? 'sent' : 'failed'} to ${recipient.trim()}`);
       } catch (error) {
         // Log failed message
         const messageLog = await this.messageLogRepository.save(
@@ -468,6 +475,63 @@ export class CommunicationService {
       to,
       message,
     });
+  }
+
+  /**
+   * Email health check
+   */
+  async emailHealthCheck(): Promise<{ healthy: boolean; message: string; details?: any }> {
+    try {
+      if (!this.emailTransporter) {
+        return {
+          healthy: false,
+          message: 'Email transporter not initialized',
+        };
+      }
+
+      // Test SMTP connection
+      const isConnected = await new Promise(resolve => {
+        this.emailTransporter.verify((error, success) => {
+          if (error) {
+            resolve(false);
+          } else {
+            resolve(success);
+          }
+        });
+      });
+
+      if (isConnected) {
+        return {
+          healthy: true,
+          message: 'Email service is operational',
+          details: {
+            host: config.smtp.host,
+            port: config.smtp.port,
+            user: config.smtp.user,
+          },
+        };
+      } else {
+        return {
+          healthy: false,
+          message: 'SMTP connection failed',
+          details: {
+            host: config.smtp.host,
+            port: config.smtp.port,
+            user: config.smtp.user,
+          },
+        };
+      }
+    } catch (error) {
+      return {
+        healthy: false,
+        message: error instanceof Error ? error.message : 'Email health check failed',
+        details: {
+          host: config.smtp.host,
+          port: config.smtp.port,
+          user: config.smtp.user,
+        },
+      };
+    }
   }
 
   /**

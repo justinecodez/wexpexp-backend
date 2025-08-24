@@ -20,19 +20,19 @@ export class User {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
-  @Column({ unique: true })
+  @Column({ type: 'varchar', unique: true })
   email!: string;
 
-  @Column({ name: 'password_hash' })
+  @Column({ type: 'varchar', name: 'password_hash' })
   passwordHash!: string;
 
-  @Column({ name: 'first_name' })
+  @Column({ type: 'varchar', name: 'first_name' })
   firstName!: string;
 
-  @Column({ name: 'last_name' })
+  @Column({ type: 'varchar', name: 'last_name' })
   lastName!: string;
 
-  @Column({ unique: true, nullable: true })
+  @Column({ type: 'varchar', unique: true, nullable: true })
   phone!: string | null;
 
   @Column({
@@ -42,16 +42,16 @@ export class User {
   })
   role!: UserRole;
 
-  @Column({ name: 'is_verified', default: false })
+  @Column({ type: 'boolean', name: 'is_verified', default: false })
   isVerified!: boolean;
 
-  @Column({ name: 'email_verified_at', nullable: true })
-  emailVerifiedAt!: Date;
+  @Column({ type: 'datetime', name: 'email_verified_at', nullable: true })
+  emailVerifiedAt!: Date | null;
 
-  @Column({ name: 'profile_image', nullable: true })
-  profileImage!: string;
+  @Column({ type: 'varchar', name: 'profile_image', nullable: true })
+  profileImage!: string | null;
 
-  @Column({ name: 'company_name', nullable: true })
+  @Column({ type: 'varchar', name: 'company_name', nullable: true })
   companyName!: string | null;
 
   @Column({
@@ -62,14 +62,14 @@ export class User {
   })
   businessType!: BusinessType | null;
 
-  @Column({ name: 'refresh_token', nullable: true })
-  refreshToken!: string;
+  @Column({ type: 'varchar', name: 'refresh_token', nullable: true })
+  refreshToken!: string | null;
 
-  @Column({ name: 'reset_token', nullable: true })
-  resetToken!: string;
+  @Column({ type: 'varchar', name: 'reset_token', nullable: true })
+  resetToken!: string | null;
 
-  @Column({ name: 'reset_token_expiry', nullable: true })
-  resetTokenExpiry!: Date;
+  @Column({ type: 'datetime', name: 'reset_token_expiry', nullable: true })
+  resetTokenExpiry!: Date | null;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;

@@ -134,7 +134,15 @@ export const errorHandler = (err: any, req: Request, res: Response, next: NextFu
   error.message = err.message;
 
   // Log error
-  logger.error(err);
+  logger.error('Error occurred:', {
+    message: err.message,
+    stack: err.stack,
+    name: err.name,
+    statusCode: err.statusCode || 500,
+    url: req.originalUrl,
+    method: req.method,
+    ip: req.ip,
+  });
 
   // Zod validation error
   if (err instanceof ZodError) {

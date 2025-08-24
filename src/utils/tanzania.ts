@@ -23,31 +23,6 @@ export function validateTanzanianPhone(phoneNumber: string): TanzanianPhoneNumbe
   if (formatted.length === 9) {
     const prefix = formatted.substring(0, 3);
     
-    // Vodacom: 074, 075, 076
-    if (['074', '075', '076'].includes(prefix)) {
-      operator = 'Vodacom';
-      isValid = true;
-    }
-    // Airtel: 067, 068, 069, 078
-    else if (['067', '068', '069', '078'].includes(prefix)) {
-      operator = 'Airtel';
-      isValid = true;
-    }
-    // Tigo: 065, 071, 077
-    else if (['065', '071', '077'].includes(prefix)) {
-      operator = 'Tigo';
-      isValid = true;
-    }
-    // Halotel: 062
-    else if (['062'].includes(prefix)) {
-      operator = 'Halotel';
-      isValid = true;
-    }
-    // TTCL: 073
-    else if (['073'].includes(prefix)) {
-      operator = 'TTCL';
-      isValid = true;
-    }
   }
 
   return {

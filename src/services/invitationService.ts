@@ -13,7 +13,7 @@ import {
   PaginationQuery,
   PaginationInfo,
 } from '../types';
-import { validateTanzanianPhone } from '../utils/tanzania';
+
 import communicationService from './communicationService';
 import QRCode from 'qrcode';
 import crypto from 'crypto';
@@ -76,14 +76,10 @@ export class InvitationService {
       );
     }
 
-    // Validate phone number if provided
+    // Use phone number as provided (no validation)
     let formattedPhone = guestPhone;
     if (guestPhone) {
-      const phoneValidation = validateTanzanianPhone(guestPhone);
-      if (!phoneValidation.isValid) {
-        throw new AppError('Invalid Tanzanian phone number format', 400, 'INVALID_PHONE');
-      }
-      formattedPhone = phoneValidation.formatted;
+      formattedPhone = guestPhone.trim();
     }
 
     // Check for duplicate invitations

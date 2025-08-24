@@ -13,7 +13,7 @@ import {
   JWTPayload,
   RefreshTokenPayload,
 } from '../types';
-import { validateTanzanianPhone } from '../utils/tanzania';
+
 import logger from '../config/logger';
 
 export class AuthService {
@@ -33,16 +33,10 @@ export class AuthService {
       throw new AppError('User with this email already exists', 409, 'USER_EXISTS');
     }
 
-    // Validate phone number if provided
+    // Check if phone number is already used (if provided)
     if (phone) {
-      const phoneValidation = validateTanzanianPhone(phone);
-      if (!phoneValidation.isValid) {
-        throw new AppError('Invalid Tanzanian phone number format', 400, 'INVALID_PHONE');
-      }
-
-      // Check if phone number is already used
       const existingPhone = await userRepository.findOne({
-        where: { phone: phoneValidation.formatted },
+        where: { phone: phone.trim() },
       });
 
       if (existingPhone) {
@@ -59,7 +53,7 @@ export class AuthService {
     newUser.passwordHash = passwordHash;
     newUser.firstName = firstName;
     newUser.lastName = lastName;
-    newUser.phone = phone ? validateTanzanianPhone(phone).formatted : null;
+    newUser.phone = phone ? phone.trim() : null;
     newUser.companyName = companyName || null;
     newUser.businessType = (businessType as BusinessType) || null;
 

@@ -12,10 +12,19 @@ import {
   PaginationInfo,
   EventAnalyticsResponse,
 } from '../types';
-import { validateTanzanianPhone } from '../utils/tanzania';
+
 import logger from '../config/logger';
 
 export class EventService {
+  private eventRepository: Repository<Event>;
+  private invitationRepository: Repository<Invitation>;
+  private userRepository: Repository<User>;
+
+  constructor() {
+    this.eventRepository = database.getRepository(Event) as Repository<Event>;
+    this.invitationRepository = database.getRepository(Invitation) as Repository<Invitation>;
+    this.userRepository = database.getRepository(User) as Repository<User>;
+  }
   /**
    * Create a new event
    */
@@ -46,27 +55,27 @@ export class EventService {
       throw new AppError('End time must be after start time', 400, 'INVALID_TIME_RANGE');
     }
 
-    const event = await prisma.event.create({
-      data: {
-        userId,
-        title,
-        description,
-        eventType: eventType as any,
-        eventDate: eventDateTime,
-        startTime,
-        endTime,
-        venueName,
-        venueAddress,
-        venueCity: venueCity as any,
-        maxGuests,
-        budget: budget ? budget.toString() : null,
-        isPublic,
-      },
+    const event = this.eventRepository.create({
+      userId,
+      title,
+      description,
+      eventType: eventType as any,
+      eventDate: eventDateTime,
+      startTime,
+      endTime,
+      venueName,
+      venueAddress,
+      venueCity: venueCity as any,
+      maxGuests,
+      budget: budget || 0,
+      isPublic,
     });
 
-    logger.info(`Event created: ${event.id} by user: ${userId}`);
+    const savedEvent = await this.eventRepository.save(event);
 
-    return this.formatEventResponse(event);
+    logger.info(`Event created: ${savedEvent.id} by user: ${userId}`);
+
+    return this.formatEventResponse(savedEvent);
   }
 
   /**
@@ -117,16 +126,41 @@ export class EventService {
       ];
     }
 
-    // Get total count
-    const total = await prisma.event.count({ where });
+    // Build TypeORM query
+    const queryBuilder = this.eventRepository.createQueryBuilder('event');
+    queryBuilder.where('event.userId = :userId', { userId });
 
-    // Get events
-    const events = await prisma.event.findMany({
-      where,
-      skip,
-      take: limit,
-      orderBy: { [sortBy]: sortOrder },
-    });
+    if (status) {
+      queryBuilder.andWhere('event.status = :status', { status });
+    }
+    if (eventType) {
+      queryBuilder.andWhere('event.eventType = :eventType', { eventType });
+    }
+    if (venueCity) {
+      queryBuilder.andWhere('event.venueCity = :venueCity', { venueCity });
+    }
+    if (startDate) {
+      queryBuilder.andWhere('event.eventDate >= :startDate', { startDate: new Date(startDate) });
+    }
+    if (endDate) {
+      queryBuilder.andWhere('event.eventDate <= :endDate', { endDate: new Date(endDate) });
+    }
+    if (search) {
+      queryBuilder.andWhere(
+        '(event.title ILIKE :search OR event.description ILIKE :search OR event.venueName ILIKE :search)',
+        { search: `%${search}%` }
+      );
+    }
+
+    // Get total count
+    const total = await queryBuilder.getCount();
+
+    // Get events with pagination
+    const events = await queryBuilder
+      .orderBy(`event.${sortBy}`, sortOrder.toUpperCase() as 'ASC' | 'DESC')
+      .skip(skip)
+      .take(limit)
+      .getMany();
 
     const formattedEvents = events.map(this.formatEventResponse);
 
@@ -191,25 +225,42 @@ export class EventService {
       ];
     }
 
-    // Get total count
-    const total = await prisma.event.count({ where });
+    // Build TypeORM query for public events
+    const queryBuilder = this.eventRepository.createQueryBuilder('event');
+    queryBuilder
+      .leftJoinAndSelect('event.user', 'user')
+      .where('event.isPublic = :isPublic', { isPublic: true })
+      .andWhere('event.status = :status', { status: 'ACTIVE' })
+      .andWhere('event.eventDate >= :now', { now: new Date() });
 
-    // Get events
-    const events = await prisma.event.findMany({
-      where,
-      skip,
-      take: limit,
-      orderBy: { [sortBy]: sortOrder },
-      include: {
-        user: {
-          select: {
-            firstName: true,
-            lastName: true,
-            companyName: true,
-          },
-        },
-      },
-    });
+    if (eventType) {
+      queryBuilder.andWhere('event.eventType = :eventType', { eventType });
+    }
+    if (venueCity) {
+      queryBuilder.andWhere('event.venueCity = :venueCity', { venueCity });
+    }
+    if (startDate) {
+      queryBuilder.andWhere('event.eventDate >= :startDate', { startDate: new Date(startDate) });
+    }
+    if (endDate) {
+      queryBuilder.andWhere('event.eventDate <= :endDate', { endDate: new Date(endDate) });
+    }
+    if (search) {
+      queryBuilder.andWhere(
+        '(event.title ILIKE :search OR event.description ILIKE :search OR event.venueName ILIKE :search)',
+        { search: `%${search}%` }
+      );
+    }
+
+    // Get total count
+    const total = await queryBuilder.getCount();
+
+    // Get events with user data
+    const events = await queryBuilder
+      .orderBy(`event.${sortBy}`, sortOrder.toUpperCase() as 'ASC' | 'DESC')
+      .skip(skip)
+      .take(limit)
+      .getMany();
 
     const formattedEvents = events.map((event: any) => ({
       ...this.formatEventResponse(event),
@@ -237,28 +288,13 @@ export class EventService {
    * Get a single event by ID
    */
   async getEventById(eventId: string, userId?: string): Promise<EventResponse> {
-    const event = await prisma.event.findUnique({
-      where: { id: eventId },
-      include: {
-        user: {
-          select: {
-            firstName: true,
-            lastName: true,
-            companyName: true,
-            email: true,
-          },
-        },
-        invitations: {
-          select: {
-            id: true,
-            guestName: true,
-            rsvpStatus: true,
-            checkInTime: true,
-          },
-        },
-        eCards: true,
-      },
-    });
+    const event = await this.eventRepository
+      .createQueryBuilder('event')
+      .leftJoinAndSelect('event.user', 'user')
+      .leftJoinAndSelect('event.invitations', 'invitations')
+      .leftJoinAndSelect('event.eCards', 'eCards')
+      .where('event.id = :eventId', { eventId })
+      .getOne();
 
     if (!event) {
       throw new AppError('Event not found', 404, 'EVENT_NOT_FOUND');
@@ -289,7 +325,7 @@ export class EventService {
     updateData: Partial<CreateEventRequest>
   ): Promise<EventResponse> {
     // Check if event exists and belongs to user
-    const existingEvent = await prisma.event.findUnique({
+    const existingEvent = await this.eventRepository.findOne({
       where: { id: eventId },
     });
 
@@ -316,16 +352,22 @@ export class EventService {
       }
     }
 
-    const updatedEvent = await prisma.event.update({
-      where: { id: eventId },
-      data: {
-        ...updateData,
-        eventDate: updateData.eventDate ? new Date(updateData.eventDate) : undefined,
-        eventType: updateData.eventType as any,
-        venueCity: updateData.venueCity as any,
-        budget: updateData.budget ? updateData.budget.toString() : undefined,
-      },
-    });
+    const updatePayload: any = { ...updateData };
+    if (updateData.eventDate) {
+      updatePayload.eventDate = new Date(updateData.eventDate);
+    }
+    if (updateData.eventType) {
+      updatePayload.eventType = updateData.eventType as any;
+    }
+    if (updateData.venueCity) {
+      updatePayload.venueCity = updateData.venueCity as any;
+    }
+    if (updateData.budget !== undefined) {
+      updatePayload.budget = updateData.budget;
+    }
+
+    await this.eventRepository.update({ id: eventId }, updatePayload);
+    const updatedEvent = await this.eventRepository.findOne({ where: { id: eventId } });
 
     logger.info(`Event updated: ${eventId} by user: ${userId}`);
 
@@ -337,7 +379,7 @@ export class EventService {
    */
   async deleteEvent(eventId: string, userId: string): Promise<{ message: string }> {
     // Check if event exists and belongs to user
-    const event = await prisma.event.findUnique({
+    const event = await this.eventRepository.findOne({
       where: { id: eventId },
     });
 
@@ -349,9 +391,7 @@ export class EventService {
       throw new AppError('Access denied to this event', 403, 'EVENT_ACCESS_DENIED');
     }
 
-    await prisma.event.delete({
-      where: { id: eventId },
-    });
+    await this.eventRepository.delete({ id: eventId });
 
     logger.info(`Event deleted: ${eventId} by user: ${userId}`);
 
@@ -363,7 +403,7 @@ export class EventService {
    */
   async duplicateEvent(eventId: string, userId: string): Promise<EventResponse> {
     // Get original event
-    const originalEvent = await prisma.event.findUnique({
+    const originalEvent = await this.eventRepository.findOne({
       where: { id: eventId },
     });
 
@@ -376,28 +416,28 @@ export class EventService {
     }
 
     // Create new event with modified title
-    const newEvent = await prisma.event.create({
-      data: {
-        userId,
-        title: `${originalEvent.title} (Copy)`,
-        description: originalEvent.description,
-        eventType: originalEvent.eventType,
-        eventDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days from now
-        startTime: originalEvent.startTime,
-        endTime: originalEvent.endTime,
-        venueName: originalEvent.venueName,
-        venueAddress: originalEvent.venueAddress,
-        venueCity: originalEvent.venueCity,
-        maxGuests: originalEvent.maxGuests,
-        budget: originalEvent.budget,
-        isPublic: false, // Always create as private
-        status: 'DRAFT',
-      },
+    const newEvent = this.eventRepository.create({
+      userId,
+      title: `${originalEvent.title} (Copy)`,
+      description: originalEvent.description,
+      eventType: originalEvent.eventType,
+      eventDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days from now
+      startTime: originalEvent.startTime,
+      endTime: originalEvent.endTime,
+      venueName: originalEvent.venueName,
+      venueAddress: originalEvent.venueAddress,
+      venueCity: originalEvent.venueCity,
+      maxGuests: originalEvent.maxGuests,
+      budget: originalEvent.budget,
+      isPublic: false, // Always create as private
+      status: 'DRAFT' as any,
     });
 
-    logger.info(`Event duplicated: ${eventId} -> ${newEvent.id} by user: ${userId}`);
+    const savedNewEvent = await this.eventRepository.save(newEvent);
 
-    return this.formatEventResponse(newEvent);
+    logger.info(`Event duplicated: ${eventId} -> ${savedNewEvent.id} by user: ${userId}`);
+
+    return this.formatEventResponse(savedNewEvent);
   }
 
   /**
@@ -405,7 +445,7 @@ export class EventService {
    */
   async getEventAnalytics(eventId: string, userId: string): Promise<EventAnalyticsResponse> {
     // Check if event exists and belongs to user
-    const event = await prisma.event.findUnique({
+    const event = await this.eventRepository.findOne({
       where: { id: eventId },
     });
 
@@ -417,12 +457,15 @@ export class EventService {
       throw new AppError('Access denied to this event', 403, 'EVENT_ACCESS_DENIED');
     }
 
-    // Get invitation statistics
-    const invitationStats = await prisma.invitation.groupBy({
-      by: ['rsvpStatus', 'deliveryStatus'],
-      where: { eventId },
-      _count: true,
-    });
+    // Get invitation statistics using raw query for groupBy functionality
+    const invitationStats = await this.invitationRepository
+      .createQueryBuilder('invitation')
+      .select('invitation.rsvpStatus', 'rsvpStatus')
+      .addSelect('invitation.deliveryStatus', 'deliveryStatus')
+      .addSelect('COUNT(*)', 'count')
+      .where('invitation.eventId = :eventId', { eventId })
+      .groupBy('invitation.rsvpStatus, invitation.deliveryStatus')
+      .getRawMany();
 
     // Calculate totals
     let totalInvitations = 0;
@@ -437,42 +480,46 @@ export class EventService {
     let whatsappSent = 0;
 
     invitationStats.forEach((stat: any) => {
-      totalInvitations += stat._count;
+      const count = parseInt(stat.count);
+      totalInvitations += count;
 
-      if (stat.rsvpStatus === 'ACCEPTED') totalAccepted += stat._count;
-      if (stat.rsvpStatus === 'DECLINED') totalDeclined += stat._count;
-      if (stat.rsvpStatus === 'PENDING') totalPending += stat._count;
+      if (stat.rsvpStatus === 'ACCEPTED') totalAccepted += count;
+      if (stat.rsvpStatus === 'DECLINED') totalDeclined += count;
+      if (stat.rsvpStatus === 'PENDING') totalPending += count;
     });
 
     // Get delivery statistics by method
-    const deliveryStats = await prisma.invitation.groupBy({
-      by: ['invitationMethod', 'deliveryStatus'],
-      where: { eventId },
-      _count: true,
-    });
+    const deliveryStats = await this.invitationRepository
+      .createQueryBuilder('invitation')
+      .select('invitation.invitationMethod', 'invitationMethod')
+      .addSelect('invitation.deliveryStatus', 'deliveryStatus')
+      .addSelect('COUNT(*)', 'count')
+      .where('invitation.eventId = :eventId', { eventId })
+      .groupBy('invitation.invitationMethod, invitation.deliveryStatus')
+      .getRawMany();
 
     deliveryStats.forEach((stat: any) => {
+      const count = parseInt(stat.count);
       if (stat.invitationMethod === 'EMAIL') {
-        emailSent += stat._count;
-        if (stat.deliveryStatus === 'DELIVERED') emailDelivered += stat._count;
+        emailSent += count;
+        if (stat.deliveryStatus === 'DELIVERED') emailDelivered += count;
       }
       if (stat.invitationMethod === 'SMS') {
-        smsSent += stat._count;
-        if (stat.deliveryStatus === 'DELIVERED') smsDelivered += stat._count;
+        smsSent += count;
+        if (stat.deliveryStatus === 'DELIVERED') smsDelivered += count;
       }
       if (stat.invitationMethod === 'WHATSAPP') {
-        whatsappSent += stat._count;
-        if (stat.deliveryStatus === 'DELIVERED') whatsappDelivered += stat._count;
+        whatsappSent += count;
+        if (stat.deliveryStatus === 'DELIVERED') whatsappDelivered += count;
       }
     });
 
     // Get check-in count
-    const totalCheckedIn = await prisma.invitation.count({
-      where: {
-        eventId,
-        checkInTime: { not: null },
-      },
-    });
+    const totalCheckedIn = await this.invitationRepository
+      .createQueryBuilder('invitation')
+      .where('invitation.eventId = :eventId', { eventId })
+      .andWhere('invitation.checkInTime IS NOT NULL')
+      .getCount();
 
     // Calculate rates
     const acceptanceRate = totalInvitations > 0 ? (totalAccepted / totalInvitations) * 100 : 0;

@@ -1,10 +1,7 @@
 import { z } from 'zod';
-import { validateTanzanianPhone } from './tanzania';
 
-// Custom phone validator for Tanzania
-const tanzanianPhoneSchema = z.string().refine(phone => validateTanzanianPhone(phone).isValid, {
-  message: 'Invalid Tanzanian phone number format. Use +255XXXXXXXXX',
-});
+// Simple phone schema without validation
+const phoneSchema = z.string().min(1, 'Phone number cannot be empty');
 
 // Authentication Schemas
 export const loginSchema = z.object({
@@ -24,7 +21,7 @@ export const registerSchema = z.object({
     ),
   firstName: z.string().min(2, 'First name must be at least 2 characters'),
   lastName: z.string().min(2, 'Last name must be at least 2 characters'),
-  phone: tanzanianPhoneSchema.optional(),
+  phone: phoneSchema.optional(),
   companyName: z.string().optional(),
   businessType: z.enum(['INDIVIDUAL', 'COMPANY', 'ORGANIZATION']).optional(),
 });
@@ -48,7 +45,7 @@ export const resetPasswordSchema = z.object({
 export const updateProfileSchema = z.object({
   firstName: z.string().min(2, 'First name must be at least 2 characters').optional(),
   lastName: z.string().min(2, 'Last name must be at least 2 characters').optional(),
-  phone: tanzanianPhoneSchema.optional(),
+  phone: phoneSchema.optional(),
   companyName: z.string().optional(),
   businessType: z.enum(['INDIVIDUAL', 'COMPANY', 'ORGANIZATION']).optional(),
 });
@@ -136,7 +133,7 @@ const baseInvitationSchema = z.object({
   eventId: z.string().cuid('Invalid event ID'),
   guestName: z.string().min(2, 'Guest name must be at least 2 characters'),
   guestEmail: z.string().email('Invalid email format').optional(),
-  guestPhone: tanzanianPhoneSchema.optional(),
+  guestPhone: phoneSchema.optional(),
   invitationMethod: z.enum(['EMAIL', 'SMS', 'WHATSAPP']),
   specialRequirements: z.string().optional(),
 });
@@ -246,7 +243,7 @@ export const emailSchema = z
   });
 
 export const smsSchema = z.object({
-  to: z.union([tanzanianPhoneSchema, z.array(tanzanianPhoneSchema)]),
+  to: z.union([phoneSchema, z.array(phoneSchema)]),
   message: z.string().min(1, 'Message is required').max(160, 'SMS message too long'),
   scheduled: z
     .string()
@@ -257,7 +254,7 @@ export const smsSchema = z.object({
 });
 
 export const whatsappSchema = z.object({
-  to: z.union([tanzanianPhoneSchema, z.array(tanzanianPhoneSchema)]),
+  to: z.union([phoneSchema, z.array(phoneSchema)]),
   message: z.string().min(1, 'Message is required'),
   type: z.enum(['text', 'template']).optional(),
   templateName: z.string().optional(),
