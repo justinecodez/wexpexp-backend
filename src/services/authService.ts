@@ -105,9 +105,9 @@ export class AuthService {
     }
 
     // Check if user is verified
-    if (!user.isVerified) {
-      throw new AppError('Please verify your email address first', 401, 'EMAIL_NOT_VERIFIED');
-    }
+    // if (!user.isVerified) {
+    //   throw new AppError('Please verify your email address first', 401, 'EMAIL_NOT_VERIFIED');
+    // }
 
     // Generate tokens
     const { accessToken, refreshToken } = await this.generateTokens(user.id, user.email, user.role);

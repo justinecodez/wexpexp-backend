@@ -9,6 +9,32 @@ import logger from '../config/logger';
 
 const router = Router();
 
+// Simple connection test endpoint
+router.get('/', async (req, res) => {
+  try {
+    res.json({
+      success: true,
+      message: 'Backend API is running successfully!',
+      timestamp: new Date().toISOString(),
+      version: '1.0.0',
+      endpoints: {
+        auth: '/api/auth',
+        events: '/api/events',
+        invitations: '/api/invitations',
+        tours: '/api/tours',
+        vehicles: '/api/vehicles',
+      }
+    });
+  } catch (error) {
+    logger.error('Test endpoint error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
 // Test email endpoint
 const testEmailSchema = z.object({
   to: z.string().email('Invalid email format'),

@@ -23,24 +23,24 @@ export const generalLimiter = rateLimit({
 });
 
 // Strict rate limiter for authentication endpoints
-export const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // Limit each IP to 5 requests per windowMs
-  message: {
-    success: false,
-    error: 'Too many authentication attempts, please try again later.',
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-  skipSuccessfulRequests: true, // Don't count successful requests
-  handler: (req: Request, res: Response) => {
-    logger.warn(`Auth rate limit exceeded for IP: ${req.ip} on ${req.path}`);
-    res.status(429).json({
-      success: false,
-      error: 'Too many authentication attempts, please try again later.',
-    });
-  },
-});
+// export const authLimiter = rateLimit({
+//   windowMs: 15 * 60 * 1000, // 15 minutes
+//   max: 5, // Limit each IP to 5 requests per windowMs
+//   message: {
+//     success: false,
+//     error: 'Too many authentication attempts, please try again later.',
+//   },
+//   standardHeaders: true,
+//   legacyHeaders: false,
+//   skipSuccessfulRequests: true, // Don't count successful requests
+//   handler: (req: Request, res: Response) => {
+//     logger.warn(`Auth rate limit exceeded for IP: ${req.ip} on ${req.path}`);
+//     res.status(429).json({
+//       success: false,
+//       error: 'Too many authentication attempts, please try again later.',
+//     });
+//   },
+// });
 
 // Password reset rate limiter
 export const passwordResetLimiter = rateLimit({

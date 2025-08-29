@@ -49,11 +49,11 @@ export const authenticate = catchAsync(
     }
 
     // 4) Check if user is verified
-    if (!currentUser.isVerified) {
-      return next(
-        new AppError('Please verify your email address first.', 401, 'EMAIL_NOT_VERIFIED')
-      );
-    }
+    // if (!currentUser.isVerified) {
+    //   return next(
+    //     new AppError('Please verify your email address first.', 401, 'EMAIL_NOT_VERIFIED')
+    //   );
+    // }
 
     // Grant access to protected route
     req.user = decoded;
