@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import vehicleController from '../controllers/vehicleController';
-import { authenticate, verifyVehicleBookingOwnership } from '../middleware/auth';
+import { authenticate, verifyTourBookingOwnership as verifyBookingOwnership } from '../middleware/auth';
 import { validateBody, validateQuery, validateParams } from '../middleware/validation';
 import {
   serviceFilterSchema,
@@ -153,7 +153,7 @@ router.put(
   '/bookings/:id',
   authenticate,
   validateParams(idParamSchema),
-  verifyVehicleBookingOwnership,
+  verifyBookingOwnership,
   validateBody(
     z.object({
       status: z.enum(['PENDING', 'CONFIRMED', 'CANCELLED', 'COMPLETED']).optional(),
@@ -173,7 +173,7 @@ router.delete(
   '/bookings/:id',
   authenticate,
   validateParams(idParamSchema),
-  verifyVehicleBookingOwnership,
+  verifyBookingOwnership,
   vehicleController.cancelBooking
 );
 

@@ -244,6 +244,172 @@ export class AccommodationService {
   }
 
   /**
+   * Get popular accommodations
+   */
+  async getPopularAccommodations(limit: number = 10, location?: string): Promise<any[]> {
+    const queryBuilder = this.accommodationRepository.createQueryBuilder('accommodation')
+      .where('accommodation.isActive = :isActive', { isActive: true })
+      .orderBy('accommodation.rating', 'DESC');
+
+    if (location) {
+      queryBuilder.andWhere('accommodation.location = :location', { location });
+    }
+
+    const accommodations = await queryBuilder
+      .take(limit)
+      .getMany();
+
+    return accommodations.map(this.formatAccommodationResponse);
+  }
+
+  /**
+   * Search accommodations
+   */
+  async searchAccommodations(searchParams: any): Promise<any> {
+    const { location, checkIn, checkOut, guests, type, minPrice, maxPrice, amenities } = searchParams;
+
+    const queryBuilder = this.accommodationRepository.createQueryBuilder('accommodation')
+      .where('accommodation.isActive = :isActive', { isActive: true });
+
+    if (location) {
+      queryBuilder.andWhere('accommodation.location = :location', { location });
+    }
+
+    if (type) {
+      queryBuilder.andWhere('accommodation.type = :type', { type });
+    }
+
+    if (minPrice) {
+      queryBuilder.andWhere('accommodation.basePrice >= :minPrice', { minPrice });
+    }
+
+    if (maxPrice) {
+      queryBuilder.andWhere('accommodation.basePrice <= :maxPrice', { maxPrice });
+    }
+
+    if (amenities && amenities.length > 0) {
+      queryBuilder.andWhere('accommodation.amenities @> :amenities', { amenities });
+    }
+
+    const accommodations = await queryBuilder.getMany();
+
+    return accommodations.map(this.formatAccommodationResponse);
+  }
+
+  /**
+   * Get available locations
+   */
+  async getAvailableLocations(): Promise<string[]> {
+    const locations = await this.accommodationRepository
+      .createQueryBuilder('accommodation')
+      .select('DISTINCT accommodation.location')
+      .where('accommodation.isActive = :isActive', { isActive: true })
+      .getRawMany();
+
+    return locations.map((item: any) => item.location);
+  }
+
+  /**
+   * Create accommodation
+   */
+  async createAccommodation(accommodationData: any): Promise<any> {
+    const accommodation = this.accommodationRepository.create(accommodationData);
+    const savedAccommodation = await this.accommodationRepository.save(accommodation);
+    return this.formatAccommodationResponse(savedAccommodation);
+  }
+
+  /**
+   * Update accommodation
+   */
+  async updateAccommodation(id: string, userId: string, updateData: any): Promise<any> {
+    const accommodation = await this.accommodationRepository.findOne({
+      where: { id },
+    });
+
+    if (!accommodation) {
+      throw new AppError('Accommodation not found', 404, 'ACCOMMODATION_NOT_FOUND');
+    }
+
+    Object.assign(accommodation, updateData);
+    const updatedAccommodation = await this.accommodationRepository.save(accommodation);
+    return this.formatAccommodationResponse(updatedAccommodation);
+  }
+
+  /**
+   * Delete accommodation
+   */
+  async deleteAccommodation(id: string, userId: string): Promise<void> {
+    const accommodation = await this.accommodationRepository.findOne({
+      where: { id },
+    });
+
+    if (!accommodation) {
+      throw new AppError('Accommodation not found', 404, 'ACCOMMODATION_NOT_FOUND');
+    }
+
+    await this.accommodationRepository.softDelete(id);
+  }
+
+  /**
+   * Update accommodation availability
+   */
+  async updateAvailability(id: string, userId: string, availabilityData: any): Promise<any> {
+    const accommodation = await this.accommodationRepository.findOne({
+      where: { id },
+    });
+
+    if (!accommodation) {
+      throw new AppError('Accommodation not found', 404, 'ACCOMMODATION_NOT_FOUND');
+    }
+
+    accommodation.isActive = availabilityData.isActive;
+    const updatedAccommodation = await this.accommodationRepository.save(accommodation);
+    return this.formatAccommodationResponse(updatedAccommodation);
+  }
+
+  /**
+   * Update booking
+   */
+  async updateBooking(id: string, userId: string, updateData: any): Promise<BookingResponse> {
+    const booking = await this.bookingRepository.findOne({
+      where: { id, userId },
+    });
+
+    if (!booking) {
+      throw new AppError('Booking not found', 404, 'BOOKING_NOT_FOUND');
+    }
+
+    if (booking.status === BookingStatus.CANCELLED) {
+      throw new AppError('Cannot update cancelled booking', 400, 'BOOKING_CANCELLED');
+    }
+
+    Object.assign(booking, updateData);
+    const updatedBooking = await this.bookingRepository.save(booking);
+
+    return this.formatBookingResponse(updatedBooking);
+  }
+
+  /**
+   * Cancel booking
+   */
+  async cancelBooking(id: string, userId: string): Promise<void> {
+    const booking = await this.bookingRepository.findOne({
+      where: { id, userId },
+    });
+
+    if (!booking) {
+      throw new AppError('Booking not found', 404, 'BOOKING_NOT_FOUND');
+    }
+
+    if (booking.status === BookingStatus.CANCELLED) {
+      throw new AppError('Booking is already cancelled', 400, 'BOOKING_ALREADY_CANCELLED');
+    }
+
+    booking.status = BookingStatus.CANCELLED;
+    await this.bookingRepository.save(booking);
+  }
+
+  /**
    * Format booking response
    */
   private formatBookingResponse(booking: any): BookingResponse {

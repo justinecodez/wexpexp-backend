@@ -19,8 +19,21 @@ import eventRoutes from './routes/events';
 import invitationRoutes from './routes/invitations';
 import tourRoutes from './routes/tours';
 import vehicleRoutes from './routes/vehicles';
+import accommodationRoutes from './routes/accommodations';
 import testRoutes from './routes/test';
-// Other routes will be added as needed
+import templateRoutes from './routes/templates';
+import budgetRoutes from './routes/budgets';
+import calendarRoutes from './routes/calendar';
+import draftRoutes from './routes/drafts';
+// New routes
+import userRoutes from './routes/users';
+import ecardRoutes from './routes/ecards';
+import venueRoutes from './routes/venues';
+import decorationRoutes from './routes/decorations';
+import carImportRoutes from './routes/car-import';
+import insuranceRoutes from './routes/insurance';
+import landingRoutes from './routes/landing';
+import communicationRoutes from './routes/communications';
 
 // Import Socket.IO service
 import SocketService from './services/socketService';
@@ -159,11 +172,14 @@ class App {
           decorations: '/api/decorations',
           'car-import': '/api/car-import',
           insurance: '/api/insurance',
-          budgeting: '/api/budgeting',
+          budgeting: '/api/budgets',
+          templates: '/api/templates',
+          calendar: '/api/calendar',
           landing: '/api/landing',
           communications: '/api/communications',
-        },
-        documentation: '/api/docs',
+          drafts: '/api/drafts',
+          documentation: '/api/docs'
+        }
       });
     });
   }
@@ -175,19 +191,22 @@ class App {
     this.app.use('/api/invitations', invitationRoutes);
     this.app.use('/api/tours', tourRoutes);
     this.app.use('/api/vehicles', vehicleRoutes);
+    this.app.use('/api/accommodations', accommodationRoutes);
     this.app.use('/api/test', testRoutes);
-
-    // Routes to be implemented later
-    // this.app.use('/api/users', userRoutes);
-    // this.app.use('/api/ecards', ecardRoutes);
-    // this.app.use('/api/accommodations', accommodationRoutes);
-    // this.app.use('/api/venues', venueRoutes);
-    // this.app.use('/api/decorations', decorationRoutes);
-    // this.app.use('/api/car-import', carImportRoutes);
-    // this.app.use('/api/insurance', insuranceRoutes);
-    // this.app.use('/api/budgeting', budgetingRoutes);
-    // this.app.use('/api/landing', landingRoutes);
-    // this.app.use('/api/communications', communicationRoutes);
+    this.app.use('/api/templates', templateRoutes);
+    this.app.use('/api/budgets', budgetRoutes);
+    this.app.use('/api/calendar', calendarRoutes);
+    this.app.use('/api/drafts', draftRoutes);
+    
+    // Now implemented routes
+    this.app.use('/api/users', userRoutes);
+    this.app.use('/api/ecards', ecardRoutes);
+    this.app.use('/api/venues', venueRoutes);
+    this.app.use('/api/decorations', decorationRoutes);
+    this.app.use('/api/car-import', carImportRoutes);
+    this.app.use('/api/insurance', insuranceRoutes);
+    this.app.use('/api/landing', landingRoutes);
+    this.app.use('/api/communications', communicationRoutes);
 
     // Temporary placeholder for unimplemented routes
     this.app.get('/api/*', (req, res) => {

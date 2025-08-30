@@ -203,67 +203,13 @@ export const verifyTourBookingOwnership = catchAsync(
     }
 
     if (booking.userId !== req.user.userId) {
-      return next(
-        new AppError('You can only access your own bookings', 403, 'BOOKING_ACCESS_DENIED')
-      );
+      return next(new AppError('You can only access your own bookings', 403, 'BOOKING_ACCESS_DENIED'));
     }
 
     next();
   }
 );
 
-export const verifyVehicleBookingOwnership = catchAsync(
-  async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-    if (!req.user) {
-      return next(new AppError('You are not logged in!', 401, 'NO_USER'));
-    }
-
-    const bookingId = (req.params.id || req.params.bookingId) as string;
-
-    if (!bookingId) {
-      return next(new AppError('Booking ID is required', 400, 'MISSING_BOOKING_ID'));
-    }
-
-    // Admin can access all bookings
-    if (req.user.role === 'ADMIN') {
-      return next();
-    }
-
-    // Check if vehicle booking belongs to user
-    const bookingRepository = database.getRepository(Booking);
-    const booking = await bookingRepository.findOne({
-      where: { id: bookingId },
-      select: ['userId'],
-    });
-
-    if (!booking) {
-      return next(new AppError('Booking not found', 404, 'BOOKING_NOT_FOUND'));
-    }
-
-    if (booking.userId !== req.user.userId) {
-      return next(
-        new AppError('You can only access your own bookings', 403, 'BOOKING_ACCESS_DENIED')
-      );
-    }
-
-    next();
-  }
-);
-
-export const apiKeyAuth = (req: Request, res: Response, next: NextFunction) => {
-  const apiKey = req.headers['x-api-key'] as string;
-
-  if (!apiKey) {
-    return next(new AppError('API key is required', 401, 'MISSING_API_KEY'));
-  }
-
-  // In production, you would validate against stored API keys
-  // For now, just check if it matches a configured key
-  const validApiKey = process.env.API_KEY;
-
-  if (!validApiKey || apiKey !== validApiKey) {
-    return next(new AppError('Invalid API key', 401, 'INVALID_API_KEY'));
-  }
-
-  next();
-};
+// Additional auth middleware exports
+export const authenticateToken = authenticate;
+export const requireAdmin = authorize('ADMIN');

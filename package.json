@@ -6,9 +6,11 @@
     "scripts": {
         "build": "tsc",
         "start": "node dist/app.js",
-        "dev": "nodemon src/app.ts",
+        "dev": "nodemon server.ts",
         "test": "jest",
         "test:watch": "jest --watch",
+        "test:integration": "jest --config jest.integration.config.js",
+        "test:integration:watch": "jest --config jest.integration.config.js --watch",
         "db:migrate": "typeorm migration:run -d src/config/database.ts",
         "db:revert": "typeorm migration:revert -d src/config/database.ts",
         "db:generate": "typeorm migration:generate -d src/config/database.ts",

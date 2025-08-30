@@ -279,6 +279,58 @@ export const carImportInquirySchema = z.object({
   additionalDetails: z.string().optional(),
 });
 
+// Template Schemas
+export const createTemplateSchema = z.object({
+  eventId: z.string().cuid('Invalid event ID'),
+  name: z.string().min(1, 'Template name is required').max(100),
+  settings: z.object({
+    includeInvitations: z.boolean().optional(),
+    includeECards: z.boolean().optional(),
+    includeBudget: z.boolean().optional(),
+    includeVenue: z.boolean().optional(),
+  }).optional(),
+});
+
+export const updateTemplateSchema = createTemplateSchema.partial();
+
+// Budget Schemas
+export const budgetItemSchema = z.object({
+  category: z.string().min(1, 'Category is required'),
+  description: z.string().min(1, 'Description is required'),
+  amount: z.number().positive('Amount must be positive'),
+  dueDate: z.string().refine(date => !isNaN(Date.parse(date)), {
+    message: 'Invalid date format',
+  }).optional(),
+  status: z.enum(['PLANNED', 'PAID', 'CANCELLED']),
+  paymentMethod: z.string().optional(),
+  attachments: z.array(z.string()).optional(),
+});
+
+// Calendar Schemas
+export const calendarConnectionSchema = z.object({
+  provider: z.enum(['GOOGLE', 'OUTLOOK', 'ICAL']),
+  accessToken: z.string().optional(),
+  refreshToken: z.string().optional(),
+  tokenExpiry: z.string().optional(),
+});
+
+export const calendarEventSchema = z.object({
+  eventId: z.string().cuid('Invalid event ID'),
+  title: z.string().min(1, 'Event title is required'),
+  description: z.string().optional(),
+  startDate: z.string().refine(date => !isNaN(Date.parse(date)), {
+    message: 'Invalid start date format',
+  }),
+  endDate: z.string().refine(date => !isNaN(Date.parse(date)), {
+    message: 'Invalid end date format',
+  }).optional(),
+  location: z.string().optional(),
+  attendees: z.array(z.object({
+    email: z.string().email('Invalid email format'),
+    name: z.string().optional(),
+  })).optional(),
+});
+
 // Budget Schemas
 export const createBudgetSchema = z.object({
   eventId: z.string().cuid('Invalid event ID').optional(),
@@ -338,3 +390,16 @@ export type BookingSchema = z.infer<typeof bookingSchema>;
 export type EmailSchema = z.infer<typeof emailSchema>;
 export type SMSSchema = z.infer<typeof smsSchema>;
 export type WhatsAppSchema = z.infer<typeof whatsappSchema>;
+
+// Draft related schemas
+export const draftUpdateSchema = createEventSchema.partial().extend({
+  status: z.enum(['DRAFT']).optional(),
+  lastAutosaveAt: z.date().optional(),
+});
+
+export const publishDraftSchema = z.object({
+  draftId: z.string().uuid('Invalid draft ID'),
+});
+
+export type DraftUpdateSchema = z.infer<typeof draftUpdateSchema>;
+export type PublishDraftSchema = z.infer<typeof publishDraftSchema>;
