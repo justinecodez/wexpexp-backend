@@ -16,9 +16,6 @@ COPY . .
 # Copy environment file (rename your .env file to .env.production for production)
 # COPY .env.production .env
 
-# Generate Prisma client
-RUN npx prisma generate
-
 # Build the TypeScript code
 RUN npm run build
 

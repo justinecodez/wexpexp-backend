@@ -39,7 +39,7 @@ A comprehensive Node.js Express backend for Tanzania's premier event planning an
 
 - **Runtime:** Node.js 18+
 - **Framework:** Express.js with TypeScript
-- **Database:** PostgreSQL with Prisma ORM
+- **Database:** Typerom
 - **Authentication:** JWT with refresh tokens
 - **Real-time:** Socket.IO for live updates
 - **File Storage:** Multer (configurable for cloud)
@@ -76,7 +76,6 @@ A comprehensive Node.js Express backend for Tanzania's premier event planning an
 
 4. **Set up the database**
    ```bash
-   # Generate Prisma client
    npm run db:generate
    
    # Run database migrations
@@ -130,15 +129,13 @@ backend/
 ├── src/
 │   ├── controllers/          # Route handlers
 │   ├── middleware/          # Custom middleware
-│   ├── models/             # Prisma schema and types
+│   ├── models/             # typerom 
 │   ├── routes/             # Express routes
 │   ├── services/           # Business logic
 │   ├── utils/              # Helper functions
 │   ├── types/              # TypeScript types
 │   ├── config/             # Configuration files
 │   └── app.ts              # Express app setup
-├── prisma/
-│   ├── schema.prisma       # Database schema
 │   ├── migrations/         # Database migrations
 │   └── seed.ts             # Database seeding
 ├── uploads/                # File storage directory
@@ -642,7 +639,7 @@ All list endpoints support pagination:
 - Password hashing with bcrypt
 - Rate limiting on all endpoints
 - Input validation with Zod
-- SQL injection prevention with Prisma
+- SQL injection prevention
 - File upload security
 - Helmet.js for security headers
 - CORS configuration
@@ -681,7 +678,7 @@ npm run test:watch
 
 ## 📊 Database
 
-The application uses PostgreSQL with Prisma ORM. The database schema includes:
+The application uses Typerom ORM. The database schema includes:
 
 - Users and authentication
 - Events and invitations
@@ -694,7 +691,6 @@ The application uses PostgreSQL with Prisma ORM. The database schema includes:
 ### Database Commands
 
 ```bash
-# Generate Prisma client
 npm run db:generate
 
 # Create and apply migration

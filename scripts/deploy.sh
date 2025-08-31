@@ -186,10 +186,7 @@ run_migrations() {
     
     # Wait for database to be ready
     sleep 10
-    
-    # Run migrations
-    docker-compose -f docker-compose.prod.yml exec api npx prisma migrate deploy
-    
+      
     # Seed database if needed
     docker-compose -f docker-compose.prod.yml exec api npm run db:seed
     

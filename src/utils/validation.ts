@@ -283,12 +283,14 @@ export const carImportInquirySchema = z.object({
 export const createTemplateSchema = z.object({
   eventId: z.string().cuid('Invalid event ID'),
   name: z.string().min(1, 'Template name is required').max(100),
-  settings: z.object({
-    includeInvitations: z.boolean().optional(),
-    includeECards: z.boolean().optional(),
-    includeBudget: z.boolean().optional(),
-    includeVenue: z.boolean().optional(),
-  }).optional(),
+  settings: z
+    .object({
+      includeInvitations: z.boolean().optional(),
+      includeECards: z.boolean().optional(),
+      includeBudget: z.boolean().optional(),
+      includeVenue: z.boolean().optional(),
+    })
+    .optional(),
 });
 
 export const updateTemplateSchema = createTemplateSchema.partial();
@@ -298,9 +300,12 @@ export const budgetItemSchema = z.object({
   category: z.string().min(1, 'Category is required'),
   description: z.string().min(1, 'Description is required'),
   amount: z.number().positive('Amount must be positive'),
-  dueDate: z.string().refine(date => !isNaN(Date.parse(date)), {
-    message: 'Invalid date format',
-  }).optional(),
+  dueDate: z
+    .string()
+    .refine(date => !isNaN(Date.parse(date)), {
+      message: 'Invalid date format',
+    })
+    .optional(),
   status: z.enum(['PLANNED', 'PAID', 'CANCELLED']),
   paymentMethod: z.string().optional(),
   attachments: z.array(z.string()).optional(),
@@ -321,14 +326,21 @@ export const calendarEventSchema = z.object({
   startDate: z.string().refine(date => !isNaN(Date.parse(date)), {
     message: 'Invalid start date format',
   }),
-  endDate: z.string().refine(date => !isNaN(Date.parse(date)), {
-    message: 'Invalid end date format',
-  }).optional(),
+  endDate: z
+    .string()
+    .refine(date => !isNaN(Date.parse(date)), {
+      message: 'Invalid end date format',
+    })
+    .optional(),
   location: z.string().optional(),
-  attendees: z.array(z.object({
-    email: z.string().email('Invalid email format'),
-    name: z.string().optional(),
-  })).optional(),
+  attendees: z
+    .array(
+      z.object({
+        email: z.string().email('Invalid email format'),
+        name: z.string().optional(),
+      })
+    )
+    .optional(),
 });
 
 // Budget Schemas
@@ -364,7 +376,7 @@ export const paginationSchema = z.object({
 });
 
 export const idParamSchema = z.object({
-  id: z.string().cuid('Invalid ID format'),
+  id: z.string().uuid('Invalid ID format'),
 });
 
 // File Upload Schema
