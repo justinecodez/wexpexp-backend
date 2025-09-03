@@ -18,7 +18,13 @@
         "db:seed": "tsx src/database/seed.ts",
         "lint": "eslint src/**/*.ts",
         "lint:fix": "eslint src/**/*.ts --fix",
-        "format": "prettier --write src/**/*.ts"
+        "format": "prettier --write src/**/*.ts",
+        "logs:quiet": "node scripts/logging-control.js quiet",
+        "logs:normal": "node scripts/logging-control.js normal",
+        "logs:verbose": "node scripts/logging-control.js verbose",
+        "logs:debug": "node scripts/logging-control.js debug",
+        "logs:status": "node scripts/logging-control.js status",
+        "logs:help": "node scripts/reduce-logging.js"
     },
     "keywords": [
         "event-planning",

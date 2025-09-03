@@ -67,19 +67,23 @@ export const validateFile = (
     // Validate single file
     if (file) {
       if (allowedTypes.length > 0 && !allowedTypes.includes(file.mimetype)) {
-        return next(new AppError(
-          `Invalid file type. Allowed types: ${allowedTypes.join(', ')}`,
-          400,
-          'INVALID_FILE_TYPE'
-        ));
+        return next(
+          new AppError(
+            `Invalid file type. Allowed types: ${allowedTypes.join(', ')}`,
+            400,
+            'INVALID_FILE_TYPE'
+          )
+        );
       }
 
       if (file.size > maxSize) {
-        return next(new AppError(
-          `File too large. Maximum size: ${maxSize / (1024 * 1024)}MB`,
-          400,
-          'FILE_TOO_LARGE'
-        ));
+        return next(
+          new AppError(
+            `File too large. Maximum size: ${maxSize / (1024 * 1024)}MB`,
+            400,
+            'FILE_TOO_LARGE'
+          )
+        );
       }
     }
 
@@ -87,19 +91,23 @@ export const validateFile = (
     if (files && Array.isArray(files)) {
       for (const uploadedFile of files) {
         if (allowedTypes.length > 0 && !allowedTypes.includes(uploadedFile.mimetype)) {
-          return next(new AppError(
-            `Invalid file type. Allowed types: ${allowedTypes.join(', ')}`,
-            400,
-            'INVALID_FILE_TYPE'
-          ));
+          return next(
+            new AppError(
+              `Invalid file type. Allowed types: ${allowedTypes.join(', ')}`,
+              400,
+              'INVALID_FILE_TYPE'
+            )
+          );
         }
 
         if (uploadedFile.size > maxSize) {
-          return next(new AppError(
-            `File too large. Maximum size: ${maxSize / (1024 * 1024)}MB`,
-            400,
-            'FILE_TOO_LARGE'
-          ));
+          return next(
+            new AppError(
+              `File too large. Maximum size: ${maxSize / (1024 * 1024)}MB`,
+              400,
+              'FILE_TOO_LARGE'
+            )
+          );
         }
       }
     }
@@ -110,20 +118,20 @@ export const validateFile = (
 
 // Common validation schemas
 export const idParamSchema = z.object({
-  id: z.string().cuid('Invalid ID format'),
+  id: z.string().uuid('Invalid ID format'),
 });
 
 export const paginationQuerySchema = z.object({
   page: z
     .string()
     .optional()
-    .transform((val) => (val ? parseInt(val, 10) : 1))
-    .refine((val) => val > 0, { message: 'Page must be positive' }),
+    .transform(val => (val ? parseInt(val, 10) : 1))
+    .refine(val => val > 0, { message: 'Page must be positive' }),
   limit: z
     .string()
     .optional()
-    .transform((val) => (val ? parseInt(val, 10) : 10))
-    .refine((val) => val > 0 && val <= 100, { message: 'Limit must be between 1 and 100' }),
+    .transform(val => (val ? parseInt(val, 10) : 10))
+    .refine(val => val > 0 && val <= 100, { message: 'Limit must be between 1 and 100' }),
   sortBy: z.string().optional(),
   sortOrder: z.enum(['asc', 'desc']).optional(),
 });

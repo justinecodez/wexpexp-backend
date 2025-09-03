@@ -10,11 +10,18 @@ const dataSourceOptions: DataSourceOptions = {
   type: 'sqlite',
   database: path.join(process.cwd(), 'database.sqlite'),
   synchronize: config.nodeEnv === 'development', // Only in development
-  logging: config.nodeEnv === 'development',
+  // Disable query logging to reduce log noise, enable only when debugging
+  logging: config.nodeEnv === 'development' ? ['error', 'warn', 'migration'] : false,
+  // Alternative: Use selective logging
+  // logging: config.nodeEnv === 'development' ? ['error', 'warn', 'schema'] : false,
   entities: entityClasses,
   migrations: [path.join(__dirname, '../migrations/*.ts')],
   subscribers: [path.join(__dirname, '../subscribers/*.ts')],
   migrationsTableName: 'typeorm_migrations',
+  // Add query result cache to reduce duplicate queries
+  cache: {
+    duration: 30000, // 30 seconds cache for frequently accessed data
+  },
 };
 
 export const AppDataSource = new DataSource(dataSourceOptions);

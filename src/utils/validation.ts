@@ -1,3 +1,4 @@
+import { start } from 'repl';
 import { z } from 'zod';
 
 // Simple phone schema without validation
@@ -67,11 +68,13 @@ export const createEventSchema = z.object({
   eventDate: z.string().refine(date => !isNaN(Date.parse(date)), {
     message: 'Invalid date format',
   }),
-  startTime: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, 'Invalid time format (HH:mm)'),
-  endTime: z
-    .string()
-    .regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, 'Invalid time format (HH:mm)')
-    .optional(),
+  // startTime: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, 'Invalid time format (HH:mm)'),
+  startTime: z.string(),
+  // endTime: z
+  //   .string()
+  //   .regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, 'Invalid time format (HH:mm)')
+  //   .optional(),
+  endTime: z.string(),
   venueName: z.string().optional(),
   venueAddress: z.string().optional(),
   venueCity: z
@@ -130,7 +133,7 @@ export const eventFilterSchema = z.object({
 
 // Invitation Schemas
 const baseInvitationSchema = z.object({
-  eventId: z.string().cuid('Invalid event ID'),
+  eventId: z.string().uuid('Invalid event ID'), // Changed from uuid to uuid to match event IDs
   guestName: z.string().min(2, 'Guest name must be at least 2 characters'),
   guestEmail: z.string().email('Invalid email format').optional(),
   guestPhone: phoneSchema.optional(),
@@ -175,7 +178,7 @@ const bulkInvitationItemSchema = baseInvitationSchema.omit({ eventId: true }).re
 );
 
 export const bulkInvitationSchema = z.object({
-  eventId: z.string().cuid('Invalid event ID'),
+  eventId: z.string().uuid('Invalid event ID'), // Changed from uuid to uuid to match event IDs
   invitations: z.array(bulkInvitationItemSchema).min(1, 'At least one invitation is required'),
 });
 
@@ -210,7 +213,7 @@ export const serviceFilterSchema = z.object({
 
 export const bookingSchema = z.object({
   serviceType: z.enum(['TOUR', 'VEHICLE', 'ACCOMMODATION', 'VENUE', 'DECORATION']),
-  serviceId: z.string().cuid('Invalid service ID'),
+  serviceId: z.string().uuid('Invalid service ID'),
   bookingDate: z.string().refine(date => !isNaN(Date.parse(date)), {
     message: 'Invalid booking date format',
   }),
@@ -281,7 +284,7 @@ export const carImportInquirySchema = z.object({
 
 // Template Schemas
 export const createTemplateSchema = z.object({
-  eventId: z.string().cuid('Invalid event ID'),
+  eventId: z.string().uuid('Invalid event ID'),
   name: z.string().min(1, 'Template name is required').max(100),
   settings: z
     .object({
@@ -320,7 +323,7 @@ export const calendarConnectionSchema = z.object({
 });
 
 export const calendarEventSchema = z.object({
-  eventId: z.string().cuid('Invalid event ID'),
+  eventId: z.string().uuid('Invalid event ID'),
   title: z.string().min(1, 'Event title is required'),
   description: z.string().optional(),
   startDate: z.string().refine(date => !isNaN(Date.parse(date)), {
@@ -345,7 +348,7 @@ export const calendarEventSchema = z.object({
 
 // Budget Schemas
 export const createBudgetSchema = z.object({
-  eventId: z.string().cuid('Invalid event ID').optional(),
+  eventId: z.string().uuid('Invalid event ID').optional(),
   name: z.string().min(1, 'Budget name is required'),
   totalBudget: z.number().positive('Total budget must be positive'),
   currency: z.string().default('TZS'),
