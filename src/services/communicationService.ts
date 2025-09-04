@@ -23,6 +23,14 @@ export class CommunicationService {
    */
   private setupEmailTransporter(): void {
     try {
+      // Log configuration for debugging (without sensitive info)
+      logger.info('Setting up email transporter:', {
+        host: config.smtp.host,
+        port: config.smtp.port,
+        user: config.smtp.user,
+        hasPassword: !!config.smtp.pass,
+      });
+
       this.emailTransporter = nodemailer.createTransport({
         host: config.smtp.host,
         port: config.smtp.port,
@@ -34,9 +42,11 @@ export class CommunicationService {
         tls: {
           rejectUnauthorized: false, // Allow self-signed certificates
         },
-        connectionTimeout: 10000, // 10 seconds
-        greetingTimeout: 5000, // 5 seconds
+        connectionTimeout: 15000, // 15 seconds
+        greetingTimeout: 10000, // 10 seconds
         socketTimeout: 30000, // 30 seconds
+        debug: config.nodeEnv === 'development', // Enable debug in dev
+        logger: config.nodeEnv === 'development', // Enable logging in dev
       });
 
       // Verify connection (but don't block app startup)
@@ -44,12 +54,15 @@ export class CommunicationService {
         if (error) {
           logger.error('Email transporter verification failed:', {
             message: error.message,
+            code: (error as any).code,
+            command: (error as any).command,
+            response: (error as any).response,
             host: config.smtp.host,
             port: config.smtp.port,
             user: config.smtp.user,
           });
         } else {
-          logger.info('Email transporter is ready');
+          logger.info('✅ Email transporter is ready and verified');
         }
       });
     } catch (error) {

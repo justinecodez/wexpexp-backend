@@ -61,4 +61,7 @@ router.get('/sms-status', authenticateToken, requireAdmin, communicationControll
 // Get email service status (admin only)
 router.get('/email-status', authenticateToken, requireAdmin, communicationController.getEmailServiceStatus);
 
+// Test email endpoint (admin only)
+router.post('/test-email', authenticateToken, requireAdmin, communicationController.testEmail);
+
 export default router;

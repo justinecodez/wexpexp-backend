@@ -1,10 +1,38 @@
 import { Request, Response } from 'express';
 import logger from '../config/logger';
+import communicationService from '../services/communicationService';
 
 export class CommunicationController {
   sendEmail = async (req: Request, res: Response) => {
     try {
-      res.json({ success: true, data: { messageId: 'temp-email-id' }, message: 'Email sent successfully' });
+      const { to, subject, html, text, attachments } = req.body;
+      
+      if (!to || !subject) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Missing required fields: to, subject' 
+        });
+      }
+
+      const results = await communicationService.sendEmail({
+        to,
+        subject,
+        html,
+        text,
+        attachments
+      });
+
+      const successful = results.filter(r => r.status === 'SENT').length;
+      const failed = results.filter(r => r.status === 'FAILED').length;
+
+      res.json({ 
+        success: successful > 0, 
+        data: { 
+          results,
+          summary: { successful, failed, total: results.length }
+        }, 
+        message: `Email sending completed: ${successful} sent, ${failed} failed` 
+      });
     } catch (error) {
       logger.error('Send email error:', error);
       res.status(500).json({ success: false, error: 'Internal server error' });
@@ -157,9 +185,75 @@ export class CommunicationController {
 
   getEmailServiceStatus = async (req: Request, res: Response) => {
     try {
-      res.json({ success: true, data: { service: 'SMTP', status: 'active', lastCheck: new Date().toISOString() }, message: 'Email service status retrieved successfully' });
+      const healthCheck = await communicationService.emailHealthCheck();
+      
+      res.status(healthCheck.healthy ? 200 : 503).json({ 
+        success: healthCheck.healthy, 
+        data: { 
+          service: 'SMTP', 
+          status: healthCheck.healthy ? 'active' : 'inactive',
+          lastCheck: new Date().toISOString(),
+          ...healthCheck.details
+        }, 
+        message: healthCheck.message
+      });
     } catch (error) {
       logger.error('Get email service status error:', error);
+      res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+  };
+
+  // Test email endpoint
+  testEmail = async (req: Request, res: Response) => {
+    try {
+      const { to } = req.body;
+      
+      if (!to) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Missing required field: to (recipient email)' 
+        });
+      }
+
+      const testSubject = 'WEXP Email Service Test';
+      const testHtml = `
+        <div style="font-family: Arial, sans-serif; padding: 20px; background-color: #f5f5f5;">
+          <div style="background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+            <h2 style="color: #333; margin-bottom: 20px;">🎉 Email Service Test</h2>
+            <p>Congratulations! Your WEXP email service is working correctly.</p>
+            <p><strong>Test Details:</strong></p>
+            <ul>
+              <li>Service: SMTP via ${process.env.SMTP_HOST}</li>
+              <li>Port: ${process.env.SMTP_PORT}</li>
+              <li>Time: ${new Date().toISOString()}</li>
+            </ul>
+            <p style="margin-top: 30px; color: #666; font-size: 14px;">
+              This is an automated test email from the WEXP Tanzania Events Platform.
+            </p>
+          </div>
+        </div>
+      `;
+
+      const results = await communicationService.sendEmail({
+        to,
+        subject: testSubject,
+        html: testHtml,
+        text: 'WEXP Email Service Test - If you can read this, your email service is working correctly!'
+      });
+
+      const successful = results.filter(r => r.status === 'SENT').length;
+      const failed = results.filter(r => r.status === 'FAILED').length;
+
+      res.json({ 
+        success: successful > 0, 
+        data: { 
+          results,
+          summary: { successful, failed, total: results.length }
+        }, 
+        message: successful > 0 ? 'Test email sent successfully!' : 'Test email failed to send'
+      });
+    } catch (error) {
+      logger.error('Test email error:', error);
       res.status(500).json({ success: false, error: 'Internal server error' });
     }
   };
