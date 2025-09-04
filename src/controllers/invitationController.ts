@@ -110,6 +110,35 @@ export class InvitationController {
   );
 
   /**
+   * Update invitation details
+   */
+  updateInvitation = catchAsync(
+    async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+      if (!req.user) {
+        return res.status(401).json({
+          success: false,
+          error: 'Not authenticated',
+        });
+      }
+
+      const { id } = req.params;
+      const invitation = await invitationService.updateInvitation(
+        id,
+        req.user.userId,
+        req.body
+      );
+
+      const response: ApiResponse = {
+        success: true,
+        message: 'Invitation updated successfully',
+        data: { invitation },
+      };
+
+      res.status(200).json(response);
+    }
+  );
+
+  /**
    * Update RSVP status
    */
   updateRSVP = catchAsync(async (req: Request, res: Response, next: NextFunction) => {

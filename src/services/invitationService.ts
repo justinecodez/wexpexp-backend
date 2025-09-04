@@ -380,6 +380,103 @@ export class InvitationService {
   }
 
   /**
+   * Update invitation details
+   */
+  async updateInvitation(
+    invitationId: string,
+    userId: string,
+    updateData: {
+      guestName?: string;
+      guestEmail?: string;
+      guestPhone?: string;
+      invitationMethod?: InvitationMethod;
+      specialRequirements?: string;
+    }
+  ): Promise<InvitationResponse> {
+    const invitation = await this.invitationRepository.findOne({
+      where: { id: invitationId },
+      relations: ['event'],
+    });
+
+    if (!invitation) {
+      throw new AppError('Invitation not found', 404, 'INVITATION_NOT_FOUND');
+    }
+
+    // Verify event ownership
+    if (invitation.event.userId !== userId) {
+      throw new AppError('Access denied to this invitation', 403, 'INVITATION_ACCESS_DENIED');
+    }
+
+    // Validate contact information based on method if being updated
+    if (updateData.invitationMethod) {
+      if (updateData.invitationMethod === InvitationMethod.EMAIL && !updateData.guestEmail) {
+        throw new AppError('Email is required for email invitations', 400, 'EMAIL_REQUIRED');
+      }
+
+      if ((updateData.invitationMethod === InvitationMethod.SMS || 
+           updateData.invitationMethod === InvitationMethod.WHATSAPP) && !updateData.guestPhone) {
+        throw new AppError(
+          'Phone number is required for SMS/WhatsApp invitations',
+          400,
+          'PHONE_REQUIRED'
+        );
+      }
+    }
+
+    // Check for duplicate email/phone if being updated
+    if (updateData.guestEmail || updateData.guestPhone) {
+      const queryBuilder = this.invitationRepository
+        .createQueryBuilder('invitation')
+        .where('invitation.eventId = :eventId', { eventId: invitation.eventId })
+        .andWhere('invitation.id != :invitationId', { invitationId });
+
+      const conditions = [];
+      const parameters: any = {};
+
+      if (updateData.guestEmail) {
+        conditions.push('invitation.guestEmail = :email');
+        parameters.email = updateData.guestEmail.toLowerCase();
+      }
+
+      if (updateData.guestPhone) {
+        conditions.push('invitation.guestPhone = :phone');
+        parameters.phone = updateData.guestPhone.trim();
+      }
+
+      if (conditions.length > 0) {
+        queryBuilder.andWhere(`(${conditions.join(' OR ')})`, parameters);
+        const existingInvitation = await queryBuilder.getOne();
+
+        if (existingInvitation) {
+          throw new AppError(
+            'Another guest with this email or phone is already invited to this event',
+            409,
+            'DUPLICATE_INVITATION'
+          );
+        }
+      }
+    }
+
+    // Update invitation
+    Object.assign(invitation, {
+      guestName: updateData.guestName || invitation.guestName,
+      guestEmail: updateData.guestEmail?.toLowerCase() || invitation.guestEmail,
+      guestPhone: updateData.guestPhone?.trim() || invitation.guestPhone,
+      invitationMethod: updateData.invitationMethod || invitation.invitationMethod,
+      specialRequirements: updateData.specialRequirements !== undefined 
+        ? updateData.specialRequirements 
+        : invitation.specialRequirements,
+      updatedAt: new Date(),
+    });
+
+    const updatedInvitation = await this.invitationRepository.save(invitation);
+
+    logger.info(`Invitation updated: ${invitationId}`);
+
+    return this.formatInvitationResponse(updatedInvitation);
+  }
+
+  /**
    * Check-in guest using QR code
    */
   async checkInGuest(qrCode: string): Promise<InvitationResponse> {

@@ -7,6 +7,7 @@ import { validateBody, validateQuery, validateParams } from '../middleware/valid
 import { uploadCSV } from '../utils/fileUpload';
 import {
   createInvitationSchema,
+  updateInvitationSchema,
   bulkInvitationSchema,
   rsvpSchema,
   paginationSchema,
@@ -55,6 +56,18 @@ router.get('/event/:eventId',
     search: z.string().optional(),
   })),
   invitationController.getEventInvitations
+);
+
+/**
+ * @route   PUT /api/invitations/:id
+ * @desc    Update invitation details
+ * @access  Private
+ */
+router.put('/:id',
+  authenticate,
+  validateParams(idParamSchema),
+  validateBody(updateInvitationSchema),
+  invitationController.updateInvitation
 );
 
 /**

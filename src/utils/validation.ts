@@ -159,6 +159,24 @@ export const createInvitationSchema = baseInvitationSchema.refine(
   }
 );
 
+export const updateInvitationSchema = baseInvitationSchema.omit({ eventId: true }).refine(
+  data => {
+    if (data.invitationMethod === 'EMAIL' && !data.guestEmail) {
+      return false;
+    }
+    if (
+      (data.invitationMethod === 'SMS' || data.invitationMethod === 'WHATSAPP') &&
+      !data.guestPhone
+    ) {
+      return false;
+    }
+    return true;
+  },
+  {
+    message: 'Email is required for email invitations, phone is required for SMS/WhatsApp',
+  }
+);
+
 const bulkInvitationItemSchema = baseInvitationSchema.omit({ eventId: true }).refine(
   data => {
     if (data.invitationMethod === 'EMAIL' && !data.guestEmail) {
