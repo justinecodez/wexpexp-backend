@@ -46,7 +46,7 @@ router.post('/bulk',
  */
 router.get('/event/:eventId',
   authenticate,
-  validateParams(idParamSchema.extend({ eventId: idParamSchema.shape.id })),
+  validateParams(z.object({ eventId: z.string().uuid('Invalid event ID') })),
   verifyEventOwnership,
   validateQuery(paginationSchema.extend({
     rsvpStatus: z.enum(['PENDING', 'ACCEPTED', 'DECLINED']).optional(),
@@ -127,7 +127,7 @@ router.post('/import-csv',
  */
 router.get('/export-csv/:eventId',
   authenticate,
-  validateParams(idParamSchema.extend({ eventId: idParamSchema.shape.id })),
+  validateParams(z.object({ eventId: z.string().uuid('Invalid event ID') })),
   verifyEventOwnership,
   invitationController.exportGuestListToCSV
 );
@@ -139,7 +139,7 @@ router.get('/export-csv/:eventId',
  */
 router.get('/stats/:eventId',
   authenticate,
-  validateParams(idParamSchema.extend({ eventId: idParamSchema.shape.id })),
+  validateParams(z.object({ eventId: z.string().uuid('Invalid event ID') })),
   verifyEventOwnership,
   invitationController.getInvitationStats
 );
@@ -151,7 +151,7 @@ router.get('/stats/:eventId',
  */
 router.post('/reminders/:eventId',
   authenticate,
-  validateParams(idParamSchema.extend({ eventId: idParamSchema.shape.id })),
+  validateParams(z.object({ eventId: z.string().uuid('Invalid event ID') })),
   verifyEventOwnership,
   smsLimiter,
   invitationController.sendReminders
