@@ -15,6 +15,7 @@ import {
 } from '../types';
 
 import logger from '../config/logger';
+import { emailService } from './emailService';
 
 export class AuthService {
   /**
@@ -58,6 +59,23 @@ export class AuthService {
     newUser.businessType = (businessType as BusinessType) || null;
 
     const savedUser = await userRepository.save(newUser);
+
+    // Generate email verification token and send verification email
+    const verificationToken = crypto.randomBytes(32).toString('hex');
+    const verificationTokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+    
+    savedUser.emailVerificationToken = verificationToken;
+    savedUser.emailVerificationTokenExpiry = verificationTokenExpiry;
+    await userRepository.save(savedUser);
+    
+    // Send verification email (don't wait for it to complete)
+    emailService.sendEmailVerificationEmail(
+      savedUser.email,
+      `${firstName} ${lastName}`,
+      verificationToken
+    ).catch(error => {
+      logger.error('Failed to send verification email:', error);
+    });
 
     // Return user without sensitive data
     const user: UserProfile = {
@@ -257,26 +275,78 @@ export class AuthService {
    * Verify email address
    */
   async verifyEmail(token: string): Promise<{ message: string }> {
-    // In a real implementation, you would have an email verification token
-    // For now, we'll use the reset token mechanism
     const userRepository = database.getRepository(User);
-    const user = await userRepository.findOne({
-      where: { resetToken: token },
-    });
+    const user = await userRepository
+      .createQueryBuilder('user')
+      .where('user.emailVerificationToken = :token', { token })
+      .andWhere('user.emailVerificationTokenExpiry > :now', { now: new Date() })
+      .getOne();
 
     if (!user) {
-      throw new AppError('Invalid verification token', 400, 'INVALID_VERIFICATION_TOKEN');
+      throw new AppError('Invalid or expired verification token', 400, 'INVALID_VERIFICATION_TOKEN');
     }
 
     user.isVerified = true;
     user.emailVerifiedAt = new Date();
-    user.resetToken = null;
-    user.resetTokenExpiry = null;
+    user.emailVerificationToken = null;
+    user.emailVerificationTokenExpiry = null;
     await userRepository.save(user);
 
     logger.info(`Email verified for user: ${user.id}`);
 
+    // Send welcome email after successful verification
+    emailService.sendWelcomeEmail(
+      user.email,
+      `${user.firstName} ${user.lastName}`
+    ).catch(error => {
+      logger.error('Failed to send welcome email:', error);
+    });
+
     return { message: 'Email verified successfully' };
+  }
+
+  /**
+   * Resend email verification
+   */
+  async resendEmailVerification(email: string): Promise<{ message: string }> {
+    const userRepository = database.getRepository(User);
+    const user = await userRepository.findOne({
+      where: { email: email.toLowerCase() },
+    });
+
+    if (!user) {
+      // Don't reveal if email exists
+      return {
+        message: 'If an account with this email exists, a verification email has been sent.',
+      };
+    }
+
+    if (user.isVerified) {
+      throw new AppError('Email is already verified', 400, 'EMAIL_ALREADY_VERIFIED');
+    }
+
+    // Generate new verification token
+    const verificationToken = crypto.randomBytes(32).toString('hex');
+    const verificationTokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+    user.emailVerificationToken = verificationToken;
+    user.emailVerificationTokenExpiry = verificationTokenExpiry;
+    await userRepository.save(user);
+
+    // Send verification email
+    emailService.sendEmailVerificationEmail(
+      user.email,
+      `${user.firstName} ${user.lastName}`,
+      verificationToken
+    ).catch(error => {
+      logger.error('Failed to send verification email:', error);
+    });
+
+    logger.info(`Email verification resent for: ${email}`);
+
+    return {
+      message: 'If an account with this email exists, a verification email has been sent.',
+    };
   }
 
   /**

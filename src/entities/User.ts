@@ -71,6 +71,12 @@ export class User {
   @Column({ type: 'datetime', name: 'reset_token_expiry', nullable: true })
   resetTokenExpiry!: Date | null;
 
+  @Column({ type: 'varchar', name: 'email_verification_token', nullable: true })
+  emailVerificationToken!: string | null;
+
+  @Column({ type: 'datetime', name: 'email_verification_token_expiry', nullable: true })
+  emailVerificationTokenExpiry!: Date | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;
 

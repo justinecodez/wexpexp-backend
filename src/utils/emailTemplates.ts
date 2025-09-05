@@ -307,6 +307,57 @@ export const getBookingConfirmationTemplate = (data: EmailTemplateData): { html:
 };
 
 /**
+ * Email verification template
+ */
+export const getEmailVerificationTemplate = (data: EmailTemplateData): { html: string; subject: string } => {
+    const content = `
+        <h2 style="color: #2c3e50; margin-bottom: 20px;">Verify Your Email Address ✉️</h2>
+        <p style="font-size: 16px; line-height: 1.6; color: #555;">
+            Hello ${data.userName || 'there'},
+        </p>
+        
+        <p style="font-size: 16px; line-height: 1.6; color: #555;">
+            Thank you for registering with WEXP! To complete your account setup, please verify your email address by clicking the button below:
+        </p>
+        
+        ${getButton(data.verificationUrl || '#', 'Verify Email Address', '#27ae60')}
+        
+        ${getInfoBox(`
+            <strong>⏰ Important:</strong> This verification link will expire in 24 hours for security reasons.
+        `, 'warning')}
+        
+        <p style="font-size: 16px; line-height: 1.6; color: #555;">
+            Once your email is verified, you'll be able to:
+        </p>
+        <ul style="font-size: 16px; line-height: 1.8; color: #555; padding-left: 20px;">
+            <li>Access all platform features</li>
+            <li>Create and manage events</li>
+            <li>Book services from vendors</li>
+            <li>Receive important notifications</li>
+        </ul>
+        
+        <p style="font-size: 16px; line-height: 1.6; color: #555;">
+            If you didn't create an account with us, you can safely ignore this email.
+        </p>
+        
+        <p style="font-size: 14px; line-height: 1.6; color: #777;">
+            If the button doesn't work, copy and paste this link into your browser:<br>
+            <a href="${data.verificationUrl || '#'}" style="color: #3498db; word-break: break-all;">${data.verificationUrl || ''}</a>
+        </p>
+        
+        <p style="font-size: 16px; line-height: 1.6; color: #555;">
+            Welcome to WEXP!<br>
+            <strong>The WEXP Team</strong>
+        </p>
+    `;
+    
+    return {
+        html: getBaseTemplate('Verify Your Email Address', content),
+        subject: 'Welcome to WEXP - Please Verify Your Email 📧'
+    };
+};
+
+/**
  * Test email template
  */
 export const getTestEmailTemplate = (data: EmailTemplateData): { html: string; subject: string } => {

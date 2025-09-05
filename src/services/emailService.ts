@@ -248,6 +248,40 @@ class EmailService {
     }
 
     /**
+     * Send email verification email
+     */
+    async sendEmailVerificationEmail(to: string, userName: string, verificationToken: string): Promise<boolean> {
+        const verificationUrl = `${process.env.FRONTEND_URL}/verify-email?token=${verificationToken}`;
+        
+        const html = `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <h2 style="color: #2c3e50;">Verify Your Email Address ✉️</h2>
+                <p>Hello ${userName},</p>
+                <p>Thank you for registering with WEXP! To complete your account setup, please verify your email address.</p>
+                <div style="text-align: center; margin: 30px 0;">
+                    <a href="${verificationUrl}" 
+                       style="background-color: #27ae60; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">
+                        Verify Email Address
+                    </a>
+                </div>
+                <div style="background-color: #fff3cd; border: 1px solid #ffeaa7; color: #856404; padding: 12px; border-radius: 4px; margin: 20px 0;">
+                    <strong>⏰ Important:</strong> This verification link will expire in 24 hours for security reasons.
+                </div>
+                <p>Once your email is verified, you'll be able to access all platform features.</p>
+                <p>If you didn't create an account with us, you can safely ignore this email.</p>
+                <p>Best regards,<br>The WEXP Team</p>
+            </div>
+        `;
+
+        return this.sendEmail({
+            to,
+            subject: 'Welcome to WEXP - Please Verify Your Email 📧',
+            html,
+            text: `Welcome to WEXP, ${userName}! Please verify your email by visiting: ${verificationUrl} (This link expires in 24 hours)`
+        });
+    }
+
+    /**
      * Send a test email to verify configuration
      */
     async sendTestEmail(to: string): Promise<boolean> {

@@ -210,6 +210,29 @@ export class AuthController {
   });
 
   /**
+   * Resend email verification
+   */
+  resendEmailVerification = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        error: 'Email is required',
+      });
+    }
+
+    const result = await authService.resendEmailVerification(email);
+
+    const response: ApiResponse = {
+      success: true,
+      message: result.message,
+    };
+
+    res.status(200).json(response);
+  });
+
+  /**
    * Check authentication status
    */
   checkAuth = catchAsync(async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
