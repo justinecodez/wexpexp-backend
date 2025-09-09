@@ -16,8 +16,8 @@ router.post('/send-sms', authenticateToken, validateBody(sendSMSSchema), communi
 // Send WhatsApp message (authenticated)
 router.post('/send-whatsapp', authenticateToken, communicationController.sendWhatsApp);
 
-// Send bulk messages (admin only)
-router.post('/send-bulk', authenticateToken, requireAdmin, validateBody(sendBulkMessageSchema), communicationController.sendBulkMessages);
+// Send bulk messages (authenticated users for their own events)
+router.post('/send-bulk', authenticateToken, validateBody(sendBulkMessageSchema), communicationController.sendBulkMessages);
 
 // Get message history (authenticated)
 router.get('/messages', authenticateToken, communicationController.getMessageHistory);

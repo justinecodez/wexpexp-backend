@@ -1,8 +1,15 @@
 import { Request, Response } from 'express';
 import logger from '../config/logger';
 import communicationService from '../services/communicationService';
+import { EventService } from '../services/eventService';
 
 export class CommunicationController {
+  private eventService: EventService;
+
+  constructor() {
+    this.eventService = new EventService();
+  }
+
   sendEmail = async (req: Request, res: Response) => {
     try {
       const { to, subject, html, text, attachments } = req.body;
@@ -59,12 +66,192 @@ export class CommunicationController {
 
   sendBulkMessages = async (req: Request, res: Response) => {
     try {
-      res.json({ success: true, data: { batchId: 'temp-batch-id', sent: 0, failed: 0 }, message: 'Bulk messages initiated successfully' });
+      const { eventId, recipients, channels, subject, message, template, scheduledFor } = req.body;
+      const userId = (req as any).user?.userId;
+      
+      console.log('📬 Bulk communications request:', {
+        eventId,
+        userId,
+        recipientCount: recipients?.length,
+        channels,
+        subject,
+        hasMessage: !!message,
+        template,
+        scheduledFor
+      });
+      
+      // Validate required fields
+      if (!eventId) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Event ID is required' 
+        });
+      }
+      
+      if (!recipients || !Array.isArray(recipients) || recipients.length === 0) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Recipients array is required and cannot be empty' 
+        });
+      }
+      
+      if (!channels || !Array.isArray(channels) || channels.length === 0) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Channels array is required and cannot be empty' 
+        });
+      }
+      
+      // Verify event ownership - this will throw an AppError if user doesn't have access
+      try {
+        await this.eventService.getEventById(eventId, userId);
+        console.log(`✅ Event ownership verified for user ${userId} and event ${eventId}`);
+      } catch (error: any) {
+        console.log(`❌ Event ownership verification failed: ${error.message}`);
+        if (error.code === 'EVENT_NOT_FOUND') {
+          return res.status(404).json({ 
+            success: false, 
+            error: 'Event not found' 
+          });
+        }
+        if (error.code === 'EVENT_ACCESS_DENIED') {
+          return res.status(403).json({ 
+            success: false, 
+            error: 'You do not have permission to send communications for this event' 
+          });
+        }
+        throw error; // Re-throw other errors
+      }
+      
+      let totalSent = 0;
+      let totalFailed = 0;
+      const results = [];
+      
+      // Process each channel
+      for (const channel of channels) {
+        if (channel === 'email') {
+          // Process email recipients
+          const emailRecipients = recipients.filter(r => r.email);
+          console.log(`📧 Processing ${emailRecipients.length} email recipients`);
+          
+          if (emailRecipients.length > 0) {
+            try {
+              const emailResults = await communicationService.sendEmail({
+                to: emailRecipients.map(r => r.email),
+                subject: subject || 'Event Invitation',
+                html: this.generateInvitationHTML({
+                  eventId,
+                  message,
+                  template: template || 'default-invitation'
+                }),
+                text: message || 'You have been invited to an event. Please check your email for details.'
+              });
+              
+              const successful = emailResults.filter(r => r.status === 'SENT').length;
+              const failed = emailResults.filter(r => r.status === 'FAILED').length;
+              
+              totalSent += successful;
+              totalFailed += failed;
+              
+              results.push({
+                channel: 'email',
+                sent: successful,
+                failed: failed,
+                results: emailResults
+              });
+              
+              console.log(`✅ Email batch completed: ${successful} sent, ${failed} failed`);
+            } catch (error) {
+              console.error('❌ Email batch failed:', error);
+              totalFailed += emailRecipients.length;
+              results.push({
+                channel: 'email',
+                sent: 0,
+                failed: emailRecipients.length,
+                error: error instanceof Error ? error.message : 'Unknown error'
+              });
+            }
+          }
+        }
+        
+        // TODO: Add SMS and WhatsApp processing here
+        if (channel === 'sms') {
+          console.log('📱 SMS channel selected but not implemented yet');
+        }
+        
+        if (channel === 'whatsapp') {
+          console.log('💬 WhatsApp channel selected but not implemented yet');
+        }
+      }
+      
+      const campaignId = `campaign_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
+      logger.info(`📊 Bulk communication completed: ${totalSent} sent, ${totalFailed} failed`, {
+        campaignId,
+        eventId,
+        channels,
+        totalRecipients: recipients.length
+      });
+      
+      res.json({ 
+        success: totalSent > 0, 
+        data: { 
+          campaignId,
+          sent: totalSent, 
+          failed: totalFailed,
+          results
+        }, 
+        message: `Bulk communications ${scheduledFor ? 'scheduled' : 'completed'}: ${totalSent} sent, ${totalFailed} failed` 
+      });
     } catch (error) {
       logger.error('Send bulk messages error:', error);
       res.status(500).json({ success: false, error: 'Internal server error' });
     }
   };
+  
+  private generateInvitationHTML(options: {
+    eventId?: string;
+    message?: string;
+    template?: string;
+  }): string {
+    const { eventId, message, template } = options;
+    
+    // Basic HTML template - you can enhance this later
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Event Invitation</title>
+          <style>
+              body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+              .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+              .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+              .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
+              .button { display: inline-block; background: #667eea; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; margin: 20px 0; }
+              .footer { text-align: center; margin-top: 30px; color: #666; font-size: 14px; }
+          </style>
+      </head>
+      <body>
+          <div class="container">
+              <div class="header">
+                  <h1>🎉 You're Invited!</h1>
+              </div>
+              <div class="content">
+                  <p>Habari! You have been invited to an exciting event.</p>
+                  ${message ? `<p><em>${message}</em></p>` : ''}
+                  <p>We look forward to seeing you there!</p>
+                  <p>Best regards,<br>WEXP Events Team</p>
+              </div>
+              <div class="footer">
+                  <p>Tanzania Events Platform | Making your events memorable</p>
+              </div>
+          </div>
+      </body>
+      </html>
+    `;
+  }
 
   getMessageHistory = async (req: Request, res: Response) => {
     try {

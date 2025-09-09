@@ -77,7 +77,18 @@ export const sendSMSSchema = z.object({
 });
 
 export const sendBulkMessageSchema = z.object({
-  recipients: z.array(z.string()),
-  message: z.string().min(1),
-  type: z.enum(['EMAIL', 'SMS', 'WHATSAPP'])
+  eventId: z.string().optional(),
+  recipients: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      email: z.string().email().optional(),
+      phone: z.string().optional()
+    })
+  ),
+  channels: z.array(z.enum(['email', 'sms', 'whatsapp'])),
+  subject: z.string().optional(),
+  message: z.string().optional(),
+  template: z.string().optional(),
+  scheduledFor: z.string().optional()
 });
