@@ -36,6 +36,12 @@ interface Config {
   // SMS (Tanzania)
   sms: {
     provider: string;
+    messagingService: {
+      username: string;
+      password: string;
+      apiUrl: string;
+      defaultFrom: string;
+    };
     beem: {
       apiKey: string;
       secretKey: string;
@@ -137,7 +143,13 @@ const config: Config = {
 
   // SMS
   sms: {
-    provider: process.env.SMS_PROVIDER || 'beem',
+    provider: process.env.SMS_PROVIDER || 'messaging-service',
+    messagingService: {
+      username: process.env.MESSAGING_SERVICE_USERNAME || 'justinecodez',
+      password: process.env.MESSAGING_SERVICE_PASSWORD || 'YTj5BM8wtaTJHA@',
+      apiUrl: process.env.MESSAGING_SERVICE_API_URL || 'https://messaging-service.co.tz/api/sms/v1/text/single',
+      defaultFrom: process.env.MESSAGING_SERVICE_DEFAULT_FROM || 'Wexp Card',
+    },
     beem: {
       apiKey: process.env.BEEM_API_KEY || '',
       secretKey: process.env.BEEM_SECRET_KEY || '',

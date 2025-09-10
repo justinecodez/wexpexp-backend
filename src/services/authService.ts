@@ -16,6 +16,7 @@ import {
 
 import logger from '../config/logger';
 import { emailService } from './emailService';
+import communicationService from './communicationService';
 
 export class AuthService {
   /**
@@ -75,6 +76,15 @@ export class AuthService {
       verificationToken
     ).catch(error => {
       logger.error('Failed to send verification email:', error);
+    });
+    
+    // Send welcome notification (SMS + Email) - don't wait for completion
+    communicationService.sendWelcomeNotification({
+      name: `${firstName} ${lastName}`,
+      email: savedUser.email,
+      phone: savedUser.phone || undefined
+    }).catch(error => {
+      logger.error('Failed to send welcome notification:', error);
     });
 
     // Return user without sensitive data

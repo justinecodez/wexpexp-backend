@@ -5,6 +5,8 @@ import { InvitationMethod, DeliveryStatus } from '../entities/enums';
 import { Repository } from 'typeorm';
 import config from '../config';
 import { AppError } from '../middleware/errorHandler';
+import { SMSService, initializeSMSService, getDefaultSMSService } from './smsService';
+import MessageTemplates from '../utils/messageTemplates';
 
 import { EmailRequest, SMSRequest, WhatsAppRequest, MessageResponse } from '../types';
 import logger from '../config/logger';
@@ -16,6 +18,7 @@ export class CommunicationService {
   constructor() {
     this.messageLogRepository = database.getRepository(MessageLog) as Repository<MessageLog>;
     this.setupEmailTransporter();
+    this.initializeSMSService();
   }
 
   /**
@@ -70,6 +73,30 @@ export class CommunicationService {
         message: error instanceof Error ? error.message : 'Unknown error',
         host: config.smtp.host,
         port: config.smtp.port,
+      });
+    }
+  }
+
+  /**
+   * Initialize SMS service
+   */
+  private initializeSMSService(): void {
+    try {
+      if (config.sms.provider === 'messaging-service') {
+        initializeSMSService({
+          username: config.sms.messagingService.username,
+          password: config.sms.messagingService.password,
+          apiUrl: config.sms.messagingService.apiUrl,
+          defaultFrom: config.sms.messagingService.defaultFrom
+        });
+        logger.info('✅ SMS service initialized successfully');
+      } else {
+        logger.warn('SMS service not configured for messaging-service provider');
+      }
+    } catch (error) {
+      logger.error('Failed to initialize SMS service:', {
+        message: error instanceof Error ? error.message : 'Unknown error',
+        provider: config.sms.provider
       });
     }
   }
@@ -156,7 +183,9 @@ export class CommunicationService {
         let response;
 
         // Choose SMS provider based on configuration
-        if (config.sms.provider === 'beem') {
+        if (config.sms.provider === 'messaging-service') {
+          response = await this.sendSMSMessagingService(formattedPhone, smsData.message);
+        } else if (config.sms.provider === 'beem') {
           response = await this.sendSMSBeem(formattedPhone, smsData.message);
         } else if (config.sms.provider === 'ttcl') {
           response = await this.sendSMSTTCL(formattedPhone, smsData.message);
@@ -269,6 +298,53 @@ export class CommunicationService {
     }
 
     return results;
+  }
+
+  /**
+   * Send SMS via messaging-service.co.tz
+   */
+  private async sendSMSMessagingService(
+    phone: string,
+    message: string
+  ): Promise<{ success: boolean; error?: string; metadata?: any }> {
+    try {
+      const smsService = getDefaultSMSService();
+      
+      // Validate and format phone number
+      const phoneValidation = smsService.validatePhoneNumber(phone);
+      if (!phoneValidation.isValid) {
+        throw new Error(phoneValidation.error || 'Invalid phone number format');
+      }
+      
+      const result = await smsService.sendToSingle(
+        phoneValidation.formatted!,
+        message
+      );
+      
+      if (result.success) {
+        return {
+          success: true,
+          metadata: {
+            messageId: result.messageId,
+            reference: result.reference,
+            cost: result.cost,
+            provider: 'messaging-service'
+          }
+        };
+      } else {
+        return {
+          success: false,
+          error: result.error || 'SMS sending failed',
+          metadata: result.details
+        };
+      }
+    } catch (error) {
+      logger.error('Messaging service SMS error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Messaging service SMS error'
+      };
+    }
   }
 
   /**
@@ -470,6 +546,190 @@ export class CommunicationService {
       to,
       message,
     });
+  }
+
+  /**
+   * Send welcome notification (SMS + Email)
+   */
+  async sendWelcomeNotification(
+    userData: { name: string; email?: string; phone?: string }
+  ): Promise<{ sms?: MessageResponse[]; email?: MessageResponse[] }> {
+    const results: { sms?: MessageResponse[]; email?: MessageResponse[] } = {};
+    
+    // Send welcome SMS if phone provided
+    if (userData.phone) {
+      try {
+        const smsMessage = MessageTemplates.SMS.welcome(userData);
+        results.sms = await this.sendSMS({
+          to: userData.phone,
+          message: smsMessage
+        });
+      } catch (error) {
+        logger.error('Failed to send welcome SMS:', error);
+      }
+    }
+    
+    // Send welcome email if email provided
+    if (userData.email) {
+      try {
+        const emailHtml = MessageTemplates.Email.welcome(userData);
+        results.email = await this.sendEmail({
+          to: userData.email,
+          subject: 'Welcome to WEXP!',
+          html: emailHtml
+        });
+      } catch (error) {
+        logger.error('Failed to send welcome email:', error);
+      }
+    }
+    
+    return results;
+  }
+
+  /**
+   * Send verification code notification
+   */
+  async sendVerificationCode(
+    contact: string,
+    code: string,
+    method: 'sms' | 'email' = 'sms'
+  ): Promise<MessageResponse[]> {
+    if (method === 'sms') {
+      const message = MessageTemplates.SMS.verification({ code });
+      return this.sendSMS({
+        to: contact,
+        message
+      });
+    } else {
+      // For email verification, you might want to create an email template
+      return this.sendEmail({
+        to: contact,
+        subject: 'Your WEXP Verification Code',
+        html: `<p>Your verification code is: <strong>${code}</strong></p><p>This code expires in 10 minutes.</p>`
+      });
+    }
+  }
+
+  /**
+   * Send event notification to multiple recipients
+   */
+  async sendEventNotification(
+    eventData: {
+      title: string;
+      date: Date;
+      location?: string;
+      organizerName?: string;
+      rsvpLink?: string;
+    },
+    recipients: Array<{ phone?: string; email?: string; name?: string }>,
+    notificationType: 'invitation' | 'reminder_24h' | 'reminder_1h' | 'cancellation'
+  ): Promise<{ sms: MessageResponse[]; email: MessageResponse[] }> {
+    const smsResults: MessageResponse[] = [];
+    const emailResults: MessageResponse[] = [];
+    
+    for (const recipient of recipients) {
+      // Send SMS notification
+      if (recipient.phone) {
+        try {
+          let smsMessage = '';
+          
+          switch (notificationType) {
+            case 'invitation':
+              smsMessage = MessageTemplates.SMS.eventInvitation(eventData);
+              break;
+            case 'reminder_24h':
+              smsMessage = MessageTemplates.SMS.eventReminder24h(eventData);
+              break;
+            case 'reminder_1h':
+              smsMessage = MessageTemplates.SMS.eventReminder1h(eventData);
+              break;
+            case 'cancellation':
+              smsMessage = MessageTemplates.SMS.eventCancellation(eventData);
+              break;
+          }
+          
+          const smsResult = await this.sendSMS({
+            to: recipient.phone,
+            message: smsMessage
+          });
+          smsResults.push(...smsResult);
+        } catch (error) {
+          logger.error(`Failed to send SMS to ${recipient.phone}:`, error);
+        }
+      }
+      
+      // Send email notification
+      if (recipient.email) {
+        try {
+          let emailHtml = '';
+          let subject = '';
+          
+          switch (notificationType) {
+            case 'invitation':
+              emailHtml = MessageTemplates.Email.eventInvitation(eventData);
+              subject = `Invitation: ${eventData.title}`;
+              break;
+            case 'reminder_24h':
+              emailHtml = MessageTemplates.Email.eventReminder(eventData, '24h');
+              subject = `Reminder: ${eventData.title} - Tomorrow`;
+              break;
+            case 'reminder_1h':
+              emailHtml = MessageTemplates.Email.eventReminder(eventData, '1h');
+              subject = `Final Reminder: ${eventData.title} - 1 Hour`;
+              break;
+            default:
+              // For cancellation, create a simple email
+              emailHtml = `<h2>Event Cancelled</h2><p>The event "${eventData.title}" has been cancelled. We apologize for any inconvenience.</p>`;
+              subject = `Event Cancelled: ${eventData.title}`;
+          }
+          
+          const emailResult = await this.sendEmail({
+            to: recipient.email,
+            subject,
+            html: emailHtml
+          });
+          emailResults.push(...emailResult);
+        } catch (error) {
+          logger.error(`Failed to send email to ${recipient.email}:`, error);
+        }
+      }
+    }
+    
+    return { sms: smsResults, email: emailResults };
+  }
+
+  /**
+   * Send payment confirmation notification
+   */
+  async sendPaymentConfirmation(
+    contact: { phone?: string; email?: string },
+    paymentData: {
+      amount: number;
+      currency?: string;
+      eventTitle?: string;
+      transactionId?: string;
+    }
+  ): Promise<{ sms?: MessageResponse[]; email?: MessageResponse[] }> {
+    const results: { sms?: MessageResponse[]; email?: MessageResponse[] } = {};
+    
+    if (contact.phone) {
+      const smsMessage = MessageTemplates.SMS.paymentConfirmation(paymentData);
+      results.sms = await this.sendSMS({
+        to: contact.phone,
+        message: smsMessage
+      });
+    }
+    
+    if (contact.email) {
+      const emailHtml = MessageTemplates.Email.paymentConfirmation(paymentData);
+      results.email = await this.sendEmail({
+        to: contact.email,
+        subject: 'Payment Confirmation - WEXP',
+        html: emailHtml
+      });
+    }
+    
+    return results;
   }
 
   /**

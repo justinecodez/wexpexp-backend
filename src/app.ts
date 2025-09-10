@@ -34,6 +34,7 @@ import carImportRoutes from './routes/car-import';
 import insuranceRoutes from './routes/insurance';
 import landingRoutes from './routes/landing';
 import communicationRoutes from './routes/communications';
+import messagingRoutes from './routes/messagingRoutes';
 
 // Import Socket.IO service
 import SocketService from './services/socketService';
@@ -177,6 +178,7 @@ class App {
           calendar: '/api/calendar',
           landing: '/api/landing',
           communications: '/api/communications',
+          messaging: '/api/messaging',
           drafts: '/api/drafts',
           documentation: '/api/docs'
         }
@@ -207,6 +209,7 @@ class App {
     this.app.use('/api/insurance', insuranceRoutes);
     this.app.use('/api/landing', landingRoutes);
     this.app.use('/api/communications', communicationRoutes);
+    this.app.use('/api/messaging', messagingRoutes);
 
     // Temporary placeholder for unimplemented routes
     this.app.get('/api/*', (req, res) => {

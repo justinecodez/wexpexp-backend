@@ -137,6 +137,25 @@ export const apiLimiter = rateLimit({
   },
 });
 
+// Messaging rate limiter (combines SMS and email)
+export const messagingLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 10, // Limit each IP to 10 messaging requests per minute
+  message: {
+    success: false,
+    error: 'Too many messaging requests, please try again later.',
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req: Request, res: Response) => {
+    logger.warn(`Messaging rate limit exceeded for IP: ${req.ip}`);
+    res.status(429).json({
+      success: false,
+      error: 'Too many messaging requests, please try again later.',
+    });
+  },
+});
+
 // Create a custom rate limiter factory
 export const createRateLimiter = (
   windowMs: number,
@@ -162,4 +181,15 @@ export const createRateLimiter = (
       });
     },
   });
+};
+
+// Export grouped rate limiters for easier import
+export const rateLimiter = {
+  general: generalLimiter,
+  passwordReset: passwordResetLimiter,
+  email: emailLimiter,
+  sms: smsLimiter,
+  messaging: messagingLimiter,
+  upload: uploadLimiter,
+  api: apiLimiter
 };
