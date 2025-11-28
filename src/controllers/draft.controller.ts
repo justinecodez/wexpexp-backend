@@ -1,10 +1,10 @@
 import { Request, Response } from 'express';
 import { DraftService } from '../services/draft.service';
-import { handleAsync } from '../utils/errorHandler';
+import { errorHandler } from '../middleware/errorHandler';
 import { AuthenticatedRequest } from '../types';
 
 export class DraftController {
-  constructor(private readonly draftService: DraftService) {}
+  constructor(private readonly draftService: DraftService) { }
 
   /**
    * Save or update draft

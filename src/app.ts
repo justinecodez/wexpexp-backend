@@ -35,6 +35,8 @@ import insuranceRoutes from './routes/insurance';
 import landingRoutes from './routes/landing';
 import communicationRoutes from './routes/communications';
 import messagingRoutes from './routes/messagingRoutes';
+import webhookRoutes from './routes/webhooks';
+import whatsappRoutes from './routes/whatsapp.routes';
 
 // Import Socket.IO service
 import SocketService from './services/socketService';
@@ -199,7 +201,7 @@ class App {
     this.app.use('/api/budgets', budgetRoutes);
     this.app.use('/api/calendar', calendarRoutes);
     this.app.use('/api/drafts', draftRoutes);
-    
+
     // Now implemented routes
     this.app.use('/api/users', userRoutes);
     this.app.use('/api/ecards', ecardRoutes);
@@ -210,6 +212,8 @@ class App {
     this.app.use('/api/landing', landingRoutes);
     this.app.use('/api/communications', communicationRoutes);
     this.app.use('/api/messaging', messagingRoutes);
+    this.app.use('/api/whatsapp', whatsappRoutes);
+    this.app.use('/webhooks', webhookRoutes); // WhatsApp webhook (no /api prefix)
 
     // Temporary placeholder for unimplemented routes
     this.app.get('/api/*', (req, res) => {

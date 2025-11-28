@@ -1,13 +1,13 @@
 import { Request, Response } from 'express';
 import { EventTemplateService } from '../services/eventTemplate.service';
 import { createTemplateSchema, updateTemplateSchema } from '../utils/validation';
-import { handleAsync } from '../utils/errorHandler';
+import { errorHandler } from '../middleware/errorHandler';
 import { ValidationError } from '../utils/errors';
 
 export class TemplateController {
-  constructor(private templateService: EventTemplateService) {}
+  constructor(private templateService: EventTemplateService) { }
 
-  createTemplate = handleAsync(async (req: Request, res: Response) => {
+  createTemplate = errorHandler(async (req: Request, res: Response) => {
     const validatedData = createTemplateSchema.parse(req.body);
     const userId = req.user!.id;
 

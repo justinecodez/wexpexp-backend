@@ -7,6 +7,7 @@ import config from '../config';
 import { AppError } from '../middleware/errorHandler';
 import { SMSService, initializeSMSService, getDefaultSMSService } from './smsService';
 import MessageTemplates from '../utils/messageTemplates';
+import { WhatsAppService } from './whatsapp.service';
 
 import { EmailRequest, SMSRequest, WhatsAppRequest, MessageResponse } from '../types';
 import logger from '../config/logger';
@@ -14,11 +15,13 @@ import logger from '../config/logger';
 export class CommunicationService {
   private emailTransporter!: nodemailer.Transporter;
   private messageLogRepository: Repository<MessageLog>;
+  private whatsAppService: WhatsAppService;
 
   constructor() {
     this.messageLogRepository = database.getRepository(MessageLog) as Repository<MessageLog>;
     this.setupEmailTransporter();
     this.initializeSMSService();
+    this.whatsAppService = new WhatsAppService();
   }
 
   /**
@@ -309,18 +312,18 @@ export class CommunicationService {
   ): Promise<{ success: boolean; error?: string; metadata?: any }> {
     try {
       const smsService = getDefaultSMSService();
-      
+
       // Validate and format phone number
       const phoneValidation = smsService.validatePhoneNumber(phone);
       if (!phoneValidation.isValid) {
         throw new Error(phoneValidation.error || 'Invalid phone number format');
       }
-      
+
       const result = await smsService.sendToSingle(
         phoneValidation.formatted!,
         message
       );
-      
+
       if (result.success) {
         return {
           success: true,
@@ -423,28 +426,46 @@ export class CommunicationService {
     data: WhatsAppRequest
   ): Promise<{ success: boolean; error?: string; metadata?: any }> {
     try {
-      if (!config.whatsapp.token || !config.whatsapp.phoneId) {
+      // Check if WhatsApp service is configured (basic check)
+      if (!process.env.WHATSAPP_ACCESS_TOKEN || !process.env.WHATSAPP_PHONE_NUMBER_ID) {
         throw new Error('WhatsApp Business API credentials not configured');
       }
 
-      // Note: This is a mock implementation
-      // In production, you would integrate with actual WhatsApp Business API
-      const mockResponse = {
-        success: true,
-        messageId: `wa_${Date.now()}`,
-        status: 'sent',
-      };
+      let response;
 
-      logger.info(`Mock WhatsApp sent to ${phone}: ${data.message}`);
+      if (data.type === 'template' && data.templateName) {
+        // Send template message
+        response = await this.whatsAppService.sendTemplateMessage(
+          phone,
+          data.templateName,
+          'en_US', // Default language, could be added to WhatsAppRequest
+          data.templateParams || []
+        );
+      } else {
+        // Send text message (default)
+        response = await this.whatsAppService.sendTextMessage(
+          phone,
+          data.message
+        );
+      }
 
       return {
         success: true,
-        metadata: mockResponse,
+        metadata: {
+          messageId: response.messages?.[0]?.id,
+          provider: 'whatsapp_business_api'
+        },
       };
-    } catch (error) {
+    } catch (error: any) {
+      logger.error(`WhatsApp API error for ${phone}:`, {
+        message: error.message,
+        response: error.response?.data ? JSON.stringify(error.response.data) : 'No response data',
+        status: error.response?.status,
+        headers: error.response?.headers
+      });
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'WhatsApp API error',
+        error: error.response?.data?.error?.message || error.message || 'WhatsApp API error',
       };
     }
   }
@@ -555,7 +576,7 @@ export class CommunicationService {
     userData: { name: string; email?: string; phone?: string }
   ): Promise<{ sms?: MessageResponse[]; email?: MessageResponse[] }> {
     const results: { sms?: MessageResponse[]; email?: MessageResponse[] } = {};
-    
+
     // Send welcome SMS if phone provided
     if (userData.phone) {
       try {
@@ -568,7 +589,7 @@ export class CommunicationService {
         logger.error('Failed to send welcome SMS:', error);
       }
     }
-    
+
     // Send welcome email if email provided
     if (userData.email) {
       try {
@@ -582,7 +603,7 @@ export class CommunicationService {
         logger.error('Failed to send welcome email:', error);
       }
     }
-    
+
     return results;
   }
 
@@ -592,13 +613,20 @@ export class CommunicationService {
   async sendVerificationCode(
     contact: string,
     code: string,
-    method: 'sms' | 'email' = 'sms'
+    method: 'sms' | 'email' | 'whatsapp' = 'sms'
   ): Promise<MessageResponse[]> {
     if (method === 'sms') {
       const message = MessageTemplates.SMS.verification({ code });
       return this.sendSMS({
         to: contact,
         message
+      });
+    } else if (method === 'whatsapp') {
+      const message = MessageTemplates.SMS.verification({ code }); // Use SMS template for now or create specific WA template
+      return this.sendWhatsApp({
+        to: contact,
+        message,
+        type: 'text' // Or template if you have one
       });
     } else {
       // For email verification, you might want to create an email template
@@ -622,17 +650,19 @@ export class CommunicationService {
       rsvpLink?: string;
     },
     recipients: Array<{ phone?: string; email?: string; name?: string }>,
-    notificationType: 'invitation' | 'reminder_24h' | 'reminder_1h' | 'cancellation'
-  ): Promise<{ sms: MessageResponse[]; email: MessageResponse[] }> {
+    notificationType: 'invitation' | 'reminder_24h' | 'reminder_1h' | 'cancellation',
+    channel: 'sms' | 'email' | 'whatsapp' | 'all' = 'all'
+  ): Promise<{ sms: MessageResponse[]; email: MessageResponse[]; whatsapp: MessageResponse[] }> {
     const smsResults: MessageResponse[] = [];
     const emailResults: MessageResponse[] = [];
-    
+    const whatsappResults: MessageResponse[] = [];
+
     for (const recipient of recipients) {
       // Send SMS notification
-      if (recipient.phone) {
+      if (recipient.phone && (channel === 'all' || channel === 'sms')) {
         try {
           let smsMessage = '';
-          
+
           switch (notificationType) {
             case 'invitation':
               smsMessage = MessageTemplates.SMS.eventInvitation(eventData);
@@ -647,7 +677,7 @@ export class CommunicationService {
               smsMessage = MessageTemplates.SMS.eventCancellation(eventData);
               break;
           }
-          
+
           const smsResult = await this.sendSMS({
             to: recipient.phone,
             message: smsMessage
@@ -657,13 +687,45 @@ export class CommunicationService {
           logger.error(`Failed to send SMS to ${recipient.phone}:`, error);
         }
       }
-      
+
+      // Send WhatsApp notification
+      if (recipient.phone && (channel === 'all' || channel === 'whatsapp')) {
+        try {
+          let whatsappMessage = '';
+          // For now, using the same text templates as SMS. 
+          // In the future, this should use specific WhatsApp templates.
+          switch (notificationType) {
+            case 'invitation':
+              whatsappMessage = MessageTemplates.SMS.eventInvitation(eventData);
+              break;
+            case 'reminder_24h':
+              whatsappMessage = MessageTemplates.SMS.eventReminder24h(eventData);
+              break;
+            case 'reminder_1h':
+              whatsappMessage = MessageTemplates.SMS.eventReminder1h(eventData);
+              break;
+            case 'cancellation':
+              whatsappMessage = MessageTemplates.SMS.eventCancellation(eventData);
+              break;
+          }
+
+          const whatsappResult = await this.sendWhatsApp({
+            to: recipient.phone,
+            message: whatsappMessage,
+            type: 'text'
+          });
+          whatsappResults.push(...whatsappResult);
+        } catch (error) {
+          logger.error(`Failed to send WhatsApp to ${recipient.phone}:`, error);
+        }
+      }
+
       // Send email notification
-      if (recipient.email) {
+      if (recipient.email && (channel === 'all' || channel === 'email')) {
         try {
           let emailHtml = '';
           let subject = '';
-          
+
           switch (notificationType) {
             case 'invitation':
               emailHtml = MessageTemplates.Email.eventInvitation(eventData);
@@ -682,7 +744,7 @@ export class CommunicationService {
               emailHtml = `<h2>Event Cancelled</h2><p>The event "${eventData.title}" has been cancelled. We apologize for any inconvenience.</p>`;
               subject = `Event Cancelled: ${eventData.title}`;
           }
-          
+
           const emailResult = await this.sendEmail({
             to: recipient.email,
             subject,
@@ -694,8 +756,8 @@ export class CommunicationService {
         }
       }
     }
-    
-    return { sms: smsResults, email: emailResults };
+
+    return { sms: smsResults, email: emailResults, whatsapp: whatsappResults };
   }
 
   /**
@@ -711,7 +773,7 @@ export class CommunicationService {
     }
   ): Promise<{ sms?: MessageResponse[]; email?: MessageResponse[] }> {
     const results: { sms?: MessageResponse[]; email?: MessageResponse[] } = {};
-    
+
     if (contact.phone) {
       const smsMessage = MessageTemplates.SMS.paymentConfirmation(paymentData);
       results.sms = await this.sendSMS({
@@ -719,7 +781,7 @@ export class CommunicationService {
         message: smsMessage
       });
     }
-    
+
     if (contact.email) {
       const emailHtml = MessageTemplates.Email.paymentConfirmation(paymentData);
       results.email = await this.sendEmail({
@@ -728,8 +790,63 @@ export class CommunicationService {
         html: emailHtml
       });
     }
-    
+
     return results;
+  }
+
+  /**
+   * Send wedding invitation via WhatsApp template
+   */
+  async sendWeddingInvitation(
+    to: string,
+    data: {
+      guestName: string;
+      parentsName: string;
+      groomName: string;
+      brideName: string;
+      location: string;
+      date: string;
+      startTime: string;
+      endTime: string;
+      imageUrl?: string;
+    }
+  ): Promise<MessageResponse[]> {
+    const defaultImage = 'https://images.unsplash.com/photo-1606800052052-a08af7148866?q=80&w=800&auto=format&fit=crop';
+
+    const components = [
+      {
+        type: 'header',
+        parameters: [
+          {
+            type: 'image',
+            image: {
+              link: data.imageUrl || defaultImage
+            }
+          }
+        ]
+      },
+      {
+        type: 'body',
+        parameters: [
+          { type: 'text', text: data.guestName },
+          { type: 'text', text: data.parentsName },
+          { type: 'text', text: data.groomName },
+          { type: 'text', text: data.brideName },
+          { type: 'text', text: data.location },
+          { type: 'text', text: data.date },
+          { type: 'text', text: data.startTime },
+          { type: 'text', text: data.endTime }
+        ]
+      }
+    ];
+
+    return this.sendWhatsApp({
+      to,
+      message: '', // Template message
+      type: 'template',
+      templateName: 'wedding_invitation_with_image',
+      templateParams: components
+    });
   }
 
   /**
@@ -845,15 +962,15 @@ export class CommunicationService {
                 <ul>
                     <li><strong>Event:</strong> ${eventTitle}</li>
                     <li><strong>Date:</strong> ${eventDate.toLocaleDateString('en-TZ', {
-                      weekday: 'long',
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric',
-                    })}</li>
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    })}</li>
                     <li><strong>Time:</strong> ${eventDate.toLocaleTimeString('en-TZ', {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}</li>
+      hour: '2-digit',
+      minute: '2-digit',
+    })}</li>
                 </ul>
 
                 <p>Please confirm your attendance by clicking the button below:</p>

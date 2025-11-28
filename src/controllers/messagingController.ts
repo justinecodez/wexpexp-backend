@@ -6,7 +6,7 @@ import MessageTemplates from '../utils/messageTemplates';
 import logger from '../config/logger';
 
 export class MessagingController {
-  
+
   /**
    * Send single SMS message
    * POST /api/messaging/sms/send
@@ -14,16 +14,16 @@ export class MessagingController {
   async sendSMS(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { to, message, from } = req.body;
-      
+
       if (!to || !message) {
         throw new AppError('Phone number and message are required', 400, 'MISSING_REQUIRED_FIELDS');
       }
-      
+
       const results = await communicationService.sendSMS({
         to: Array.isArray(to) ? to : [to],
         message
       });
-      
+
       res.status(200).json({
         success: true,
         message: 'SMS sent successfully',
@@ -33,7 +33,7 @@ export class MessagingController {
       next(error);
     }
   }
-  
+
   /**
    * Send bulk SMS messages
    * POST /api/messaging/sms/bulk
@@ -41,20 +41,20 @@ export class MessagingController {
   async sendBulkSMS(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { recipients, message, from } = req.body;
-      
+
       if (!recipients || !Array.isArray(recipients) || !message) {
         throw new AppError('Recipients array and message are required', 400, 'MISSING_REQUIRED_FIELDS');
       }
-      
+
       const smsService = getDefaultSMSService();
       const messages = recipients.map(phone => ({
         to: [phone],
         text: message,
         from
       }));
-      
+
       const results = await smsService.sendBulkSMS(messages);
-      
+
       res.status(200).json({
         success: true,
         message: 'Bulk SMS processing completed',
@@ -64,7 +64,7 @@ export class MessagingController {
       next(error);
     }
   }
-  
+
   /**
    * Send email
    * POST /api/messaging/email/send
@@ -72,11 +72,11 @@ export class MessagingController {
   async sendEmail(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { to, subject, html, text, attachments } = req.body;
-      
+
       if (!to || !subject || (!html && !text)) {
         throw new AppError('Recipient, subject, and content (html or text) are required', 400, 'MISSING_REQUIRED_FIELDS');
       }
-      
+
       const results = await communicationService.sendEmail({
         to: Array.isArray(to) ? to : [to],
         subject,
@@ -84,7 +84,7 @@ export class MessagingController {
         text,
         attachments
       });
-      
+
       res.status(200).json({
         success: true,
         message: 'Email sent successfully',
@@ -94,7 +94,7 @@ export class MessagingController {
       next(error);
     }
   }
-  
+
   /**
    * Send welcome notification (SMS + Email)
    * POST /api/messaging/welcome
@@ -102,17 +102,17 @@ export class MessagingController {
   async sendWelcomeNotification(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { name, email, phone } = req.body;
-      
+
       if (!name || (!email && !phone)) {
         throw new AppError('Name and at least one contact method (email or phone) are required', 400, 'MISSING_REQUIRED_FIELDS');
       }
-      
+
       const results = await communicationService.sendWelcomeNotification({
         name,
         email,
         phone
       });
-      
+
       res.status(200).json({
         success: true,
         message: 'Welcome notification sent successfully',
@@ -122,7 +122,7 @@ export class MessagingController {
       next(error);
     }
   }
-  
+
   /**
    * Send verification code
    * POST /api/messaging/verification
@@ -130,16 +130,16 @@ export class MessagingController {
   async sendVerificationCode(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { contact, method = 'sms' } = req.body;
-      
+
       if (!contact) {
         throw new AppError('Contact (phone or email) is required', 400, 'MISSING_REQUIRED_FIELDS');
       }
-      
+
       // Generate verification code
       const code = MessageTemplates.Utils.generateVerificationCode(6);
-      
+
       const results = await communicationService.sendVerificationCode(contact, code, method);
-      
+
       res.status(200).json({
         success: true,
         message: 'Verification code sent successfully',
@@ -153,7 +153,7 @@ export class MessagingController {
       next(error);
     }
   }
-  
+
   /**
    * Send event notifications
    * POST /api/messaging/event/notify
@@ -161,31 +161,32 @@ export class MessagingController {
   async sendEventNotification(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { eventData, recipients, notificationType } = req.body;
-      
+
       if (!eventData || !recipients || !notificationType) {
         throw new AppError('Event data, recipients, and notification type are required', 400, 'MISSING_REQUIRED_FIELDS');
       }
-      
+
       if (!Array.isArray(recipients)) {
         throw new AppError('Recipients must be an array', 400, 'INVALID_RECIPIENTS_FORMAT');
       }
-      
+
       const validTypes = ['invitation', 'reminder_24h', 'reminder_1h', 'cancellation'];
       if (!validTypes.includes(notificationType)) {
         throw new AppError(`Invalid notification type. Must be one of: ${validTypes.join(', ')}`, 400, 'INVALID_NOTIFICATION_TYPE');
       }
-      
+
       // Convert date string to Date object if needed
       if (typeof eventData.date === 'string') {
         eventData.date = new Date(eventData.date);
       }
-      
+
       const results = await communicationService.sendEventNotification(
         eventData,
         recipients,
-        notificationType
+        notificationType,
+        req.body.channel // Pass channel from request
       );
-      
+
       res.status(200).json({
         success: true,
         message: 'Event notifications sent successfully',
@@ -195,7 +196,7 @@ export class MessagingController {
       next(error);
     }
   }
-  
+
   /**
    * Send payment confirmation
    * POST /api/messaging/payment/confirmation
@@ -203,13 +204,13 @@ export class MessagingController {
   async sendPaymentConfirmation(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { contact, paymentData } = req.body;
-      
+
       if (!contact || !paymentData || !paymentData.amount) {
         throw new AppError('Contact information and payment data with amount are required', 400, 'MISSING_REQUIRED_FIELDS');
       }
-      
+
       const results = await communicationService.sendPaymentConfirmation(contact, paymentData);
-      
+
       res.status(200).json({
         success: true,
         message: 'Payment confirmation sent successfully',
@@ -219,7 +220,7 @@ export class MessagingController {
       next(error);
     }
   }
-  
+
   /**
    * Get message delivery status
    * GET /api/messaging/status/:messageId
@@ -227,13 +228,13 @@ export class MessagingController {
   async getMessageStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { messageId } = req.params;
-      
+
       if (!messageId) {
         throw new AppError('Message ID is required', 400, 'MISSING_MESSAGE_ID');
       }
-      
+
       const status = await communicationService.getDeliveryStatus(messageId);
-      
+
       res.status(200).json({
         success: true,
         data: status
@@ -242,7 +243,7 @@ export class MessagingController {
       next(error);
     }
   }
-  
+
   /**
    * Health check for messaging services
    * GET /api/messaging/health
@@ -253,7 +254,7 @@ export class MessagingController {
         email: await communicationService.emailHealthCheck(),
         sms: { healthy: false, message: 'SMS service not available' }
       };
-      
+
       // Check SMS service health if available
       try {
         const smsService = getDefaultSMSService();
@@ -264,9 +265,9 @@ export class MessagingController {
           message: error instanceof Error ? error.message : 'SMS service initialization error'
         };
       }
-      
+
       const overallHealth = health.email.healthy && health.sms.healthy;
-      
+
       res.status(overallHealth ? 200 : 503).json({
         success: overallHealth,
         message: overallHealth ? 'All messaging services are operational' : 'Some messaging services are experiencing issues',
@@ -276,7 +277,7 @@ export class MessagingController {
       next(error);
     }
   }
-  
+
   /**
    * Validate phone number
    * POST /api/messaging/validate/phone
@@ -284,14 +285,14 @@ export class MessagingController {
   async validatePhone(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { phone } = req.body;
-      
+
       if (!phone) {
         throw new AppError('Phone number is required', 400, 'MISSING_PHONE_NUMBER');
       }
-      
+
       const smsService = getDefaultSMSService();
       const validation = smsService.validatePhoneNumber(phone);
-      
+
       res.status(200).json({
         success: true,
         data: validation
@@ -300,7 +301,7 @@ export class MessagingController {
       next(error);
     }
   }
-  
+
   /**
    * Get available message templates
    * GET /api/messaging/templates
@@ -329,7 +330,7 @@ export class MessagingController {
           paymentConfirmation: 'Payment confirmation with receipt'
         }
       };
-      
+
       res.status(200).json({
         success: true,
         data: templates
@@ -338,7 +339,7 @@ export class MessagingController {
       next(error);
     }
   }
-  
+
   /**
    * Send custom message using templates
    * POST /api/messaging/template/send
@@ -346,14 +347,14 @@ export class MessagingController {
   async sendTemplateMessage(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { templateType, templateData, recipient, method = 'sms' } = req.body;
-      
+
       if (!templateType || !templateData || !recipient) {
         throw new AppError('Template type, template data, and recipient are required', 400, 'MISSING_REQUIRED_FIELDS');
       }
-      
+
       let message = '';
       let results;
-      
+
       if (method === 'sms') {
         // Generate SMS message using template
         switch (templateType) {
@@ -375,15 +376,24 @@ export class MessagingController {
           default:
             throw new AppError('Invalid SMS template type', 400, 'INVALID_TEMPLATE_TYPE');
         }
-        
+
         results = await communicationService.sendSMS({
           to: recipient,
           message
         });
+      } else if (method === 'whatsapp') {
+        // Send WhatsApp template message
+        results = await communicationService.sendWhatsApp({
+          to: recipient,
+          message: '', // Message is determined by template
+          type: 'template',
+          templateName: templateType === 'custom' ? templateData.templateName : templateType,
+          templateParams: templateData.components || [] // Pass components/params
+        });
       } else if (method === 'email') {
         let emailHtml = '';
         let subject = '';
-        
+
         switch (templateType) {
           case 'welcome':
             emailHtml = MessageTemplates.Email.welcome(templateData);
@@ -400,19 +410,49 @@ export class MessagingController {
           default:
             throw new AppError('Invalid email template type', 400, 'INVALID_TEMPLATE_TYPE');
         }
-        
+
         results = await communicationService.sendEmail({
           to: recipient,
           subject,
           html: emailHtml
         });
       } else {
-        throw new AppError('Invalid method. Must be sms or email', 400, 'INVALID_METHOD');
+        throw new AppError('Invalid method. Must be sms, email, or whatsapp', 400, 'INVALID_METHOD');
       }
-      
+
       res.status(200).json({
         success: true,
         message: `Template message sent successfully via ${method}`,
+        data: results
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+  /**
+   * Send wedding invitation
+   * POST /api/messaging/wedding-invitation
+   */
+  async sendWeddingInvitation(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { to, data } = req.body;
+
+      if (!to || !data) {
+        throw new AppError('Recipient and invitation data are required', 400, 'MISSING_REQUIRED_FIELDS');
+      }
+
+      const requiredFields = ['guestName', 'parentsName', 'groomName', 'brideName', 'location', 'date', 'startTime', 'endTime'];
+      const missingFields = requiredFields.filter(field => !data[field]);
+
+      if (missingFields.length > 0) {
+        throw new AppError(`Missing required data fields: ${missingFields.join(', ')}`, 400, 'MISSING_DATA_FIELDS');
+      }
+
+      const results = await communicationService.sendWeddingInvitation(to, data);
+
+      res.status(200).json({
+        success: true,
+        message: 'Wedding invitation sent successfully',
         data: results
       });
     } catch (error) {

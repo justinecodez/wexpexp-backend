@@ -420,4 +420,60 @@ router.get('/templates', messagingController.getTemplates);
  */
 router.get('/health', messagingController.healthCheck);
 
+/**
+ * @swagger
+ * /api/messaging/wedding-invitation:
+ *   post:
+ *     summary: Send wedding invitation via WhatsApp
+ *     tags: [Messaging]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - to
+ *               - data
+ *             properties:
+ *               to:
+ *                 type: string
+ *               data:
+ *                 type: object
+ *                 required:
+ *                   - guestName
+ *                   - parentsName
+ *                   - groomName
+ *                   - brideName
+ *                   - location
+ *                   - date
+ *                   - startTime
+ *                   - endTime
+ *                 properties:
+ *                   guestName:
+ *                     type: string
+ *                   parentsName:
+ *                     type: string
+ *                   groomName:
+ *                     type: string
+ *                   brideName:
+ *                     type: string
+ *                   location:
+ *                     type: string
+ *                   date:
+ *                     type: string
+ *                   startTime:
+ *                     type: string
+ *                   endTime:
+ *                     type: string
+ *                   imageUrl:
+ *                     type: string
+ *     responses:
+ *       200:
+ *         description: Invitation sent successfully
+ */
+router.post('/wedding-invitation', rateLimiter.messaging, messagingController.sendWeddingInvitation);
+
 export default router;
