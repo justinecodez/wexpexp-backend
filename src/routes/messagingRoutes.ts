@@ -476,4 +476,34 @@ router.get('/health', messagingController.healthCheck);
  */
 router.post('/wedding-invitation', rateLimiter.messaging, messagingController.sendWeddingInvitation);
 
+/**
+ * @swagger
+ * /api/messaging/whatsapp/direct:
+ *   post:
+ *     summary: Send WhatsApp message directly
+ *     tags: [Messaging]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - to
+ *               - message
+ *             properties:
+ *               to:
+ *                 type: string
+ *               message:
+ *                 type: string
+ *               mediaUrl:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: WhatsApp message sent successfully
+ */
+router.post('/whatsapp/direct', rateLimiter.messaging, messagingController.sendWhatsAppDirect);
+
 export default router;

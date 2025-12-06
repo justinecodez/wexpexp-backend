@@ -16,6 +16,7 @@ const createUploadDirs = () => {
     path.join(config.uploadDir, 'services'),
     path.join(config.uploadDir, 'landing'),
     path.join(config.uploadDir, 'temp'),
+    path.join(config.uploadDir, 'cards'), // For generated invitation cards
   ];
 
   dirs.forEach(dir => {

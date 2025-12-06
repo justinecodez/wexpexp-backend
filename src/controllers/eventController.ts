@@ -2,6 +2,13 @@ import { Request, Response, NextFunction } from 'express';
 import eventService from '../services/eventService';
 import { ApiResponse, AuthenticatedRequest, CreateEventRequest } from '../types';
 import { catchAsync } from '../middleware/errorHandler';
+import { PutObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import s3Client, { s3Config } from '../config/s3.config';
+import database from '../config/database';
+import { Event } from '../entities/Event';
+import { Invitation } from '../entities/Invitation';
+import { redisClient } from '../queues/image.queue';
 
 export class EventController {
   /**
@@ -292,6 +299,153 @@ export class EventController {
       res.status(200).json(response);
     }
   );
+
+  /**
+   * Get Presigned URL for Direct-to-Cloud Upload
+   */
+  getUploadUrl = catchAsync(async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    if (!req.user) {
+      return res.status(401).json({ success: false, error: 'Not authenticated' });
+    }
+
+    const { id } = req.params;
+    const { type } = req.query;
+
+    // 1. Validate Event Ownership
+    const event = await eventService.getEventById(id, req.user.userId);
+    if (!event) {
+      return res.status(404).json({ success: false, error: 'Event not found' });
+    }
+
+    // 2. Generate File Key
+    const fileExtension = (type as string)?.split('/')[1] || 'png';
+    const key = `events/${id}/templates/${Date.now()}_bg.${fileExtension}`;
+
+    // 3. Generate Presigned URL
+    const command = new PutObjectCommand({
+      Bucket: s3Config.bucketName,
+      Key: key,
+      ContentType: type as string,
+    });
+
+    const uploadUrl = await getSignedUrl(s3Client, command, { expiresIn: 300 }); // 5 minutes
+
+    // 4. Construct Public URL (Backblaze B2 specific)
+    // Format: https://<bucket>.<endpoint>/<key>
+    // Note: Endpoint in config includes 'https://', so we strip it for the public URL construction if needed,
+    // or just use the B2 friendly URL format.
+    // B2 Friendly URL: https://f003.backblazeb2.com/file/<bucket>/<key>
+    // However, the prompt suggested: https://<bucket>.<endpoint>/<key>
+    // Let's use the standard S3 path style which is often supported or the B2 specific one.
+    // Given the prompt's specific request: "https://<bucket>.<endpoint>/<key>"
+    const endpoint = process.env.BACKBLAZE_B2_ENDPOINT || '';
+    const publicUrl = `https://${s3Config.bucketName}.${endpoint}/${key}`;
+
+    res.status(200).json({
+      success: true,
+      data: {
+        uploadUrl,
+        publicUrl,
+      },
+    });
+  });
+
+  /**
+   * Save Template Configuration
+   */
+  saveTemplateConfig = catchAsync(async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    if (!req.user) {
+      return res.status(401).json({ success: false, error: 'Not authenticated' });
+    }
+
+    const { id } = req.params;
+    const backendPayload = req.body;
+
+    // 1. Validate Event Ownership
+    const event = await eventService.getEventById(id, req.user.userId);
+    if (!event) {
+      return res.status(404).json({ success: false, error: 'Event not found' });
+    }
+
+    // 2. Update Event with Template Config
+    // We use updateEvent service but pass the templateConfig
+    // Since updateEvent expects Partial<CreateEventRequest>, we might need to cast or ensure service handles it.
+    // Alternatively, we can call a specific method if we added one, or just use updateEvent if we update the type.
+    // For now, I'll cast it to any to bypass strict type checking for this specific field if it's not in CreateEventRequest yet.
+    await eventService.updateEvent(id, req.user.userId, {
+      templateConfig: backendPayload,
+    } as any);
+
+    res.status(200).json({
+      success: true,
+      message: 'Template configuration saved successfully',
+    });
+  });
+
+  /**
+   * Trigger Invitation Generation
+   */
+  triggerGeneration = catchAsync(async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    if (!req.user) {
+      return res.status(401).json({ success: false, error: 'Not authenticated' });
+    }
+
+    const { id } = req.params;
+
+    // 1. Fetch Event and Guests directly to get templateConfig
+    const eventRepository = database.getRepository(Event);
+    const event = await eventRepository.findOne({
+      where: { id },
+      relations: ['invitations']
+    });
+
+    if (!event) {
+      return res.status(404).json({ success: false, error: 'Event not found' });
+    }
+
+    // 2. Validate Ownership
+    if (event.userId !== req.user.userId) {
+      return res.status(403).json({ success: false, error: 'Access denied to this event' });
+    }
+
+    // 3. Validate Template Config
+    if (!event.templateConfig) {
+      return res.status(400).json({ success: false, error: 'Template configuration not found. Please save a template first.' });
+    }
+
+    // 4. Fan-Out: Create Jobs for each guest
+    const guests = event.invitations || [];
+
+    // Push jobs to Redis List 'invitation_queue'
+    const pipeline = redisClient.pipeline();
+
+    guests.forEach((guest: Invitation) => {
+      const jobData = {
+        jobId: `evt_${event.id}_guest_${guest.id}`,
+        eventId: event.id,
+        guestId: guest.id,
+        guestName: guest.guestName,
+        templateConfig: event.templateConfig,
+        s3Config: {
+          bucketName: s3Config.bucketName,
+          endpoint: process.env.BACKBLAZE_B2_ENDPOINT,
+          region: s3Config.region
+        }
+      };
+
+      pipeline.rpush('invitation_queue', JSON.stringify(jobData));
+    });
+
+    if (guests.length > 0) {
+      await pipeline.exec();
+    }
+
+    res.status(200).json({
+      success: true,
+      count: guests.length,
+      message: `Generation started for ${guests.length} guests`
+    });
+  });
 }
 
 export default new EventController();

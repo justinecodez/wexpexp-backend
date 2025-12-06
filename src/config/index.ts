@@ -89,6 +89,14 @@ interface Config {
     apiSecret: string;
   };
 
+  backblaze?: {
+    applicationKeyId: string;
+    applicationKey: string;
+    bucketId: string;
+    bucketName: string;
+    endpoint: string;
+  };
+
   // Google Maps
   googleMapsApiKey: string;
 
@@ -186,19 +194,29 @@ const config: Config = {
   // Cloud Storage
   aws: process.env.AWS_ACCESS_KEY_ID
     ? {
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
-        region: process.env.AWS_REGION || 'us-east-1',
-        bucketName: process.env.AWS_BUCKET_NAME || '',
-      }
+      accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
+      region: process.env.AWS_REGION || 'us-east-1',
+      bucketName: process.env.AWS_BUCKET_NAME || '',
+    }
+    : undefined,
+
+  backblaze: process.env.BACKBLAZE_B2_APPLICATION_KEY
+    ? {
+      applicationKeyId: process.env.BACKBLAZE_B2_KEY_ID || '',
+      applicationKey: process.env.BACKBLAZE_B2_APPLICATION_KEY || '',
+      bucketId: process.env.BACKBLAZE_B2_BUCKET_ID || '',
+      bucketName: process.env.BACKBLAZE_B2_BUCKET || '',
+      endpoint: process.env.BACKBLAZE_B2_ENDPOINT || '',
+    }
     : undefined,
 
   cloudinary: process.env.CLOUDINARY_CLOUD_NAME
     ? {
-        cloudName: process.env.CLOUDINARY_CLOUD_NAME,
-        apiKey: process.env.CLOUDINARY_API_KEY || '',
-        apiSecret: process.env.CLOUDINARY_API_SECRET || '',
-      }
+      cloudName: process.env.CLOUDINARY_CLOUD_NAME,
+      apiKey: process.env.CLOUDINARY_API_KEY || '',
+      apiSecret: process.env.CLOUDINARY_API_SECRET || '',
+    }
     : undefined,
 
   // Google Maps

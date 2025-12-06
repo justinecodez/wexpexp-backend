@@ -1,5 +1,8 @@
 import axios from 'axios';
 import logger from '../config/logger';
+import config from '../config';
+import FormData from 'form-data';
+import { Readable } from 'stream';
 
 interface WhatsAppMessage {
     from: string;
@@ -25,8 +28,8 @@ export class WhatsAppService {
 
     constructor() {
         this.apiUrl = `https://graph.facebook.com/${process.env.WHATSAPP_API_VERSION || 'v18.0'}`;
-        this.phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID || '';
-        this.accessToken = process.env.WHATSAPP_ACCESS_TOKEN || '';
+        this.phoneNumberId = config.whatsapp.phoneId || process.env.WHATSAPP_PHONE_NUMBER_ID || '';
+        this.accessToken = config.whatsapp.token || process.env.WHATSAPP_ACCESS_TOKEN || '';
 
         logger.info('WhatsAppService initialized', {
             apiUrl: this.apiUrl,
@@ -272,6 +275,112 @@ export class WhatsAppService {
                 error: error.response?.data || error.message,
                 to,
                 templateName,
+            });
+            throw error;
+        }
+    }
+    /**
+     * Upload media to WhatsApp
+     */
+    async uploadMedia(mediaData: string | Buffer, mimeType: string = 'image/png'): Promise<string> {
+        try {
+            const url = `${this.apiUrl}/${this.phoneNumberId}/media`;
+            const formData = new FormData();
+
+            let buffer: Buffer;
+            if (typeof mediaData === 'string' && mediaData.startsWith('data:')) {
+                // Convert Data URL to Buffer
+                const base64Data = mediaData.split(',')[1];
+                buffer = Buffer.from(base64Data, 'base64');
+            } else if (Buffer.isBuffer(mediaData)) {
+                buffer = mediaData;
+            } else {
+                throw new Error('Invalid media data format');
+            }
+
+            // Create a readable stream from buffer
+            const stream = Readable.from(buffer);
+            
+            formData.append('file', stream, {
+                filename: 'image.png',
+                contentType: mimeType
+            });
+            formData.append('messaging_product', 'whatsapp');
+
+            logger.info('Uploading media to WhatsApp', {
+                url,
+                mimeType,
+                size: buffer.length
+            });
+
+            const response = await axios.post(url, formData, {
+                headers: {
+                    ...formData.getHeaders(),
+                    Authorization: `Bearer ${this.accessToken}`,
+                },
+            });
+
+            logger.info('Media uploaded successfully', {
+                mediaId: response.data.id
+            });
+
+            return response.data.id;
+        } catch (error: any) {
+            logger.error('Error uploading media to WhatsApp:', {
+                error: error.response?.data || error.message,
+            });
+            throw error;
+        }
+    }
+
+    /**
+     * Send an image message via WhatsApp
+     */
+    async sendImageMessage(to: string, mediaIdOrUrl: string, caption?: string): Promise<any> {
+        try {
+            const url = `${this.apiUrl}/${this.phoneNumberId}/messages`;
+            const isUrl = mediaIdOrUrl.startsWith('http');
+
+            const imageObject = isUrl
+                ? { link: mediaIdOrUrl }
+                : { id: mediaIdOrUrl };
+
+            if (caption) {
+                (imageObject as any).caption = caption;
+            }
+
+            logger.info('Sending WhatsApp image message', {
+                to,
+                isUrl,
+                hasCaption: !!caption
+            });
+
+            const response = await axios.post(
+                url,
+                {
+                    messaging_product: 'whatsapp',
+                    to: to,
+                    type: 'image',
+                    image: imageObject,
+                },
+                {
+                    headers: {
+                        Authorization: `Bearer ${this.accessToken}`,
+                        'Content-Type': 'application/json',
+                    },
+                }
+            );
+
+            logger.info('WhatsApp image message sent successfully', {
+                to,
+                messageId: response.data.messages[0].id,
+            });
+
+            return response.data;
+        } catch (error: any) {
+            logger.error('Error sending WhatsApp image message:', {
+                error: error.response?.data || error.message,
+                to,
             });
             throw error;
         }

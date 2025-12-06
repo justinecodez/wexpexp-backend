@@ -104,4 +104,10 @@ export class Event {
 
   @OneToMany(() => ECard, ecard => ecard.event)
   eCards!: ECard[];
+
+  @Column({ name: 'message_template', nullable: true })
+  messageTemplate!: string;
+
+  @Column({ name: 'template_config', type: 'simple-json', nullable: true })
+  templateConfig!: any;
 }

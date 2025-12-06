@@ -427,7 +427,7 @@ export class CommunicationService {
   ): Promise<{ success: boolean; error?: string; metadata?: any }> {
     try {
       // Check if WhatsApp service is configured (basic check)
-      if (!process.env.WHATSAPP_ACCESS_TOKEN || !process.env.WHATSAPP_PHONE_NUMBER_ID) {
+      if (!config.whatsapp.token || !config.whatsapp.phoneId) {
         throw new Error('WhatsApp Business API credentials not configured');
       }
 
@@ -440,6 +440,21 @@ export class CommunicationService {
           data.templateName,
           'en_US', // Default language, could be added to WhatsAppRequest
           data.templateParams || []
+        );
+      } else if (data.mediaUrl) {
+        // Send media message
+        let mediaIdOrUrl = data.mediaUrl;
+
+        // If Data URL, upload first
+        if (data.mediaUrl.startsWith('data:')) {
+          logger.info(`Uploading media for ${phone}...`);
+          mediaIdOrUrl = await this.whatsAppService.uploadMedia(data.mediaUrl);
+        }
+
+        response = await this.whatsAppService.sendImageMessage(
+          phone,
+          mediaIdOrUrl,
+          data.message // Use message as caption
         );
       } else {
         // Send text message (default)

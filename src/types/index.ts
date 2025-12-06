@@ -168,6 +168,9 @@ export interface InvitationResponse {
   qrCode?: string;
   checkInTime?: Date;
   specialRequirements?: string;
+  cardUrl?: string;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface RSVPRequest {
@@ -270,6 +273,7 @@ export interface WhatsAppRequest {
   type?: 'text' | 'template';
   templateName?: string;
   templateParams?: any;
+  mediaUrl?: string;
 }
 
 export interface MessageResponse {

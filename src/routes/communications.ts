@@ -28,14 +28,14 @@ router.get('/messages/:id', authenticateToken, communicationController.getMessag
 // Get message templates (authenticated)
 router.get('/templates', authenticateToken, communicationController.getMessageTemplates);
 
-// Create message template (admin only)
-router.post('/templates', authenticateToken, requireAdmin, communicationController.createMessageTemplate);
+// Create message template (authenticated)
+router.post('/templates', authenticateToken, communicationController.createMessageTemplate);
 
-// Update message template (admin only)
-router.put('/templates/:id', authenticateToken, requireAdmin, communicationController.updateMessageTemplate);
+// Update message template (authenticated)
+router.put('/templates/:id', authenticateToken, communicationController.updateMessageTemplate);
 
-// Delete message template (admin only)
-router.delete('/templates/:id', authenticateToken, requireAdmin, communicationController.deleteMessageTemplate);
+// Delete message template (authenticated)
+router.delete('/templates/:id', authenticateToken, communicationController.deleteMessageTemplate);
 
 // Get communication statistics (admin only)
 router.get('/stats', authenticateToken, requireAdmin, communicationController.getCommunicationStats);

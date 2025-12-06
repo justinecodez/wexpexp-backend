@@ -2,12 +2,12 @@ import { Router } from 'express';
 import eventController from '../controllers/eventController';
 import { authenticate, optionalAuth, verifyEventOwnership } from '../middleware/auth';
 import { validateBody, validateQuery, validateParams } from '../middleware/validation';
-import { 
-  createEventSchema, 
-  updateEventSchema, 
+import {
+  createEventSchema,
+  updateEventSchema,
   eventFilterSchema,
   paginationSchema,
-  idParamSchema 
+  idParamSchema
 } from '../utils/validation';
 
 const router = Router();
@@ -124,6 +124,39 @@ router.patch('/:id/status',
   authenticate,
   verifyEventOwnership,
   eventController.updateEventStatus
+);
+
+/**
+ * @route   GET /api/events/:id/upload-url
+ * @desc    Get presigned URL for direct upload
+ * @access  Private (owner only)
+ */
+router.get('/:id/upload-url',
+  validateParams(idParamSchema),
+  authenticate,
+  eventController.getUploadUrl
+);
+
+/**
+ * @route   POST /api/events/:id/template
+ * @desc    Save template configuration
+ * @access  Private (owner only)
+ */
+router.post('/:id/template',
+  validateParams(idParamSchema),
+  authenticate,
+  eventController.saveTemplateConfig
+);
+
+/**
+ * @route   POST /api/events/:id/generate
+ * @desc    Trigger invitation generation
+ * @access  Private (owner only)
+ */
+router.post('/:id/generate',
+  validateParams(idParamSchema),
+  authenticate,
+  eventController.triggerGeneration
 );
 
 export default router;

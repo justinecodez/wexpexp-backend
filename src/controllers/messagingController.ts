@@ -459,6 +459,34 @@ export class MessagingController {
       next(error);
     }
   }
+  /**
+   * Send WhatsApp message directly
+   * POST /api/messaging/whatsapp/direct
+   */
+  async sendWhatsAppDirect(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { to, message, mediaUrl } = req.body;
+
+      if (!to || !message) {
+        throw new AppError('Phone number and message are required', 400, 'MISSING_REQUIRED_FIELDS');
+      }
+
+      const results = await communicationService.sendWhatsApp({
+        to: Array.isArray(to) ? to : [to],
+        message,
+        type: 'text',
+        mediaUrl
+      });
+
+      res.status(200).json({
+        success: true,
+        message: 'WhatsApp message sent successfully',
+        data: results
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 export default new MessagingController();

@@ -359,6 +359,70 @@ export class InvitationController {
       res.status(200).json(response);
     }
   );
+  /**
+   * Upload invitation card
+   */
+  uploadCard = catchAsync(
+    async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+      if (!req.user) {
+        return res.status(401).json({
+          success: false,
+          error: 'Not authenticated',
+        });
+      }
+
+      const { id } = req.params;
+      const { image } = req.body; // Base64 image
+
+      if (!image) {
+        return res.status(400).json({
+          success: false,
+          error: 'Image data is required',
+        });
+      }
+
+      console.log(`📸 Received card upload request for invitation ${id} from user ${req.user.userId}`);
+
+      const result = await invitationService.uploadCard(id, req.user.userId, image);
+
+      const response: ApiResponse = {
+        success: true,
+        message: 'Card uploaded successfully',
+        data: { cardUrl: result.cardUrl },
+      };
+
+      res.status(200).json(response);
+    }
+  );
+
+  /**
+   * Update card URL (called by worker)
+   * POST /api/invitations/:id/card-url
+   */
+  updateCardUrl = catchAsync(
+    async (req: Request, res: Response, next: NextFunction) => {
+      const { id } = req.params;
+      const { cardUrl } = req.body;
+
+      if (!cardUrl) {
+        return res.status(400).json({
+          success: false,
+          error: 'Card URL is required',
+        });
+      }
+
+      // Update invitation with card URL
+      const invitation = await invitationService.updateInvitationCardUrl(id, cardUrl);
+
+      const response: ApiResponse = {
+        success: true,
+        message: 'Card URL updated successfully',
+        data: { invitation },
+      };
+
+      res.status(200).json(response);
+    }
+  );
 }
 
 export default new InvitationController();

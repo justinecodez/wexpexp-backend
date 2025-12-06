@@ -62,6 +62,15 @@ export class Invitation {
   @Column({ name: 'qr_code', unique: true, nullable: true })
   qrCode!: string;
 
+  @Column({ name: 'qr_code_url', nullable: true })
+  qrCodeUrl!: string;
+
+  @Column({ name: 'card_url', nullable: true })
+  cardUrl!: string;
+
+  @Column({ name: 'token', nullable: true })
+  token!: string;
+
   @Column({ name: 'check_in_time', nullable: true })
   checkInTime!: Date;
 

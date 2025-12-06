@@ -170,4 +170,24 @@ router.post('/reminders/:eventId',
   invitationController.sendReminders
 );
 
+/**
+ * @route   POST /api/invitations/:id/card
+ * @desc    Upload invitation card
+ * @access  Private
+ */
+router.post('/:id/card',
+  authenticate,
+  validateParams(idParamSchema),
+  invitationController.uploadCard
+);
+
+/**
+ * @route   POST /api/invitations/:id/card-url
+ * @desc    Update card URL (called by worker)
+ * @access  Public (worker)
+ */
+router.post('/:id/card-url',
+  invitationController.updateCardUrl
+);
+
 export default router;

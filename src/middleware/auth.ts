@@ -57,6 +57,7 @@ export const authenticate = catchAsync(
 
     // Grant access to protected route
     req.user = decoded;
+    console.log('🔐 Authenticated User:', { userId: req.user.userId, role: req.user.role });
     next();
   }
 );
@@ -68,6 +69,12 @@ export const authorize = (...roles: string[]) => {
     }
 
     if (!roles.includes(req.user.role)) {
+      console.log('🚫 Authorization Failed:', {
+        userRole: req.user.role,
+        requiredRoles: roles,
+        url: req.originalUrl,
+        method: req.method
+      });
       return next(
         new AppError(
           'You do not have permission to perform this action',
@@ -167,6 +174,7 @@ export const verifyEventOwnership = catchAsync(
     }
 
     if (event.userId !== req.user.userId) {
+      console.log('🚫 Event Ownership Verification Failed:', { eventUserId: event.userId, requestUserId: req.user.userId });
       return next(new AppError('You can only access your own events', 403, 'EVENT_ACCESS_DENIED'));
     }
 

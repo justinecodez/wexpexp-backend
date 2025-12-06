@@ -90,8 +90,8 @@ class App {
     // JSON parsing middleware
 
     // Body parsing middleware
-    this.app.use(express.json({ limit: '10mb' }));
-    this.app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+    this.app.use(express.json({ limit: '50mb' }));
+    this.app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
     // Static files
     this.app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
@@ -214,6 +214,10 @@ class App {
     this.app.use('/api/messaging', messagingRoutes);
     this.app.use('/api/whatsapp', whatsappRoutes);
     this.app.use('/webhooks', webhookRoutes); // WhatsApp webhook (no /api prefix)
+    
+    // Card generation routes
+    const cardGenerationRoutes = require('./routes/cardGenerationRoutes').default;
+    this.app.use('/api/card-generation', cardGenerationRoutes);
 
     // Temporary placeholder for unimplemented routes
     this.app.get('/api/*', (req, res) => {

@@ -23,6 +23,8 @@ import csv from 'csv-parser';
 import fs from 'fs';
 import path from 'path';
 
+import { storageService } from './storageService';
+
 export class InvitationService {
   private invitationRepository: Repository<Invitation>;
   private eventRepository: Repository<Event>;
@@ -413,8 +415,8 @@ export class InvitationService {
         throw new AppError('Email is required for email invitations', 400, 'EMAIL_REQUIRED');
       }
 
-      if ((updateData.invitationMethod === InvitationMethod.SMS || 
-           updateData.invitationMethod === InvitationMethod.WHATSAPP) && !updateData.guestPhone) {
+      if ((updateData.invitationMethod === InvitationMethod.SMS ||
+        updateData.invitationMethod === InvitationMethod.WHATSAPP) && !updateData.guestPhone) {
         throw new AppError(
           'Phone number is required for SMS/WhatsApp invitations',
           400,
@@ -463,8 +465,8 @@ export class InvitationService {
       guestEmail: updateData.guestEmail?.toLowerCase() || invitation.guestEmail,
       guestPhone: updateData.guestPhone?.trim() || invitation.guestPhone,
       invitationMethod: updateData.invitationMethod || invitation.invitationMethod,
-      specialRequirements: updateData.specialRequirements !== undefined 
-        ? updateData.specialRequirements 
+      specialRequirements: updateData.specialRequirements !== undefined
+        ? updateData.specialRequirements
         : invitation.specialRequirements,
       updatedAt: new Date(),
     });
@@ -796,26 +798,95 @@ export class InvitationService {
     });
 
     if (!invitation) {
-      throw new AppError('Invalid invitation link', 404, 'INVALID_INVITATION');
+      throw new AppError('Invitation not found', 404, 'INVITATION_NOT_FOUND');
     }
 
-    const organizerName =
-      invitation.event.user.companyName ||
-      `${invitation.event.user.firstName} ${invitation.event.user.lastName}`;
+    return this.formatInvitationResponse(invitation);
+  }
 
-    return {
-      ...this.formatInvitationResponse(invitation),
-      event: {
-        ...invitation.event,
-        organizer: organizerName,
-      },
-    };
+  /**
+   * Upload invitation card
+   */
+  async uploadCard(
+    invitationId: string,
+    userId: string,
+    imageData: string
+  ): Promise<{ cardUrl: string }> {
+    const invitation = await this.invitationRepository.findOne({
+      where: { id: invitationId },
+      relations: ['event'],
+    });
+
+    if (!invitation) {
+      throw new AppError('Invitation not found', 404, 'INVITATION_NOT_FOUND');
+    }
+
+    // Verify event ownership
+    if (invitation.event.userId !== userId) {
+      throw new AppError('Access denied to this invitation', 403, 'INVITATION_ACCESS_DENIED');
+    }
+
+    // Process base64 image
+    const matches = imageData.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+    if (!matches || matches.length !== 3) {
+      throw new AppError('Invalid image data', 400, 'INVALID_IMAGE_DATA');
+    }
+
+    const type = matches[1];
+    const buffer = Buffer.from(matches[2], 'base64');
+    const extension = type.split('/')[1];
+    const fileName = `cards/${invitation.eventId}/${invitation.id}_${Date.now()}.${extension}`;
+
+    // Upload to storage
+    console.log(`🚀 Starting upload to storage bucket for file: ${fileName}`);
+    const cardUrl = await storageService.uploadFile(buffer, fileName, type);
+
+    // Update invitation with card URL
+    invitation.cardUrl = cardUrl;
+    await this.invitationRepository.save(invitation);
+
+    logger.info(`Card uploaded for invitation: ${invitationId}`);
+
+    return { cardUrl };
+  }
+
+  /**
+   * Update invitation card URL (called by worker)
+   */
+  async updateInvitationCardUrl(invitationId: string, cardUrl: string): Promise<any> {
+    const invitation = await this.invitationRepository.findOne({
+      where: { id: invitationId },
+    });
+
+    if (!invitation) {
+      throw new AppError('Invitation not found', 404, 'INVITATION_NOT_FOUND');
+    }
+
+    // Update card URL
+    invitation.cardUrl = cardUrl;
+    await this.invitationRepository.save(invitation);
+
+    logger.info(`Card URL updated for invitation: ${invitationId}`);
+
+    return this.formatInvitationResponse(invitation);
   }
 
   /**
    * Get invitation statistics for an event
    */
-  async getInvitationStats(eventId: string, userId: string): Promise<any> {
+  async getInvitationStats(
+    eventId: string,
+    userId: string
+  ): Promise<{
+    total: number;
+    sent: number;
+    delivered: number;
+    failed: number;
+    pending: number;
+    accepted: number;
+    declined: number;
+    checkedIn: number;
+  }> {
     // Verify event ownership
     const event = await this.eventRepository.findOne({
       where: { id: eventId },
@@ -830,76 +901,40 @@ export class InvitationService {
       throw new AppError('Access denied to this event', 403, 'EVENT_ACCESS_DENIED');
     }
 
-    // Get invitation statistics using query builder
     const stats = await this.invitationRepository
       .createQueryBuilder('invitation')
       .select([
-        'invitation.rsvpStatus',
-        'invitation.deliveryStatus',
-        'invitation.invitationMethod',
-        'COUNT(*) as count',
+        'COUNT(*) as total',
+        "SUM(CASE WHEN delivery_status = 'SENT' THEN 1 ELSE 0 END) as sent",
+        "SUM(CASE WHEN delivery_status = 'DELIVERED' THEN 1 ELSE 0 END) as delivered",
+        "SUM(CASE WHEN delivery_status = 'FAILED' THEN 1 ELSE 0 END) as failed",
+        "SUM(CASE WHEN rsvp_status = 'PENDING' THEN 1 ELSE 0 END) as pending",
+        "SUM(CASE WHEN rsvp_status = 'ACCEPTED' THEN 1 ELSE 0 END) as accepted",
+        "SUM(CASE WHEN rsvp_status = 'DECLINED' THEN 1 ELSE 0 END) as declined",
+        'SUM(CASE WHEN check_in_time IS NOT NULL THEN 1 ELSE 0 END) as checkedIn',
       ])
-      .where('invitation.eventId = :eventId', { eventId })
-      .groupBy('invitation.rsvpStatus, invitation.deliveryStatus, invitation.invitationMethod')
-      .getRawMany();
+      .where('event_id = :eventId', { eventId })
+      .getRawOne();
 
-    // Calculate totals
-    const summary = {
-      total: 0,
-      sent: 0,
-      delivered: 0,
-      failed: 0,
-      pending: 0,
-      accepted: 0,
-      declined: 0,
-      checkedIn: 0,
-      byMethod: {
-        email: { sent: 0, delivered: 0, failed: 0 },
-        sms: { sent: 0, delivered: 0, failed: 0 },
-        whatsapp: { sent: 0, delivered: 0, failed: 0 },
-      },
+    return {
+      total: parseInt(stats.total) || 0,
+      sent: parseInt(stats.sent) || 0,
+      delivered: parseInt(stats.delivered) || 0,
+      failed: parseInt(stats.failed) || 0,
+      pending: parseInt(stats.pending) || 0,
+      accepted: parseInt(stats.accepted) || 0,
+      declined: parseInt(stats.declined) || 0,
+      checkedIn: parseInt(stats.checkedIn) || 0,
     };
-
-    stats.forEach((stat: any) => {
-      const count = parseInt(stat.count);
-      summary.total += count;
-
-      // RSVP status
-      if (stat.invitation_rsvpStatus === 'ACCEPTED') summary.accepted += count;
-      if (stat.invitation_rsvpStatus === 'DECLINED') summary.declined += count;
-      if (stat.invitation_rsvpStatus === 'PENDING') summary.pending += count;
-
-      // Delivery status
-      if (stat.invitation_deliveryStatus === 'SENT') summary.sent += count;
-      if (stat.invitation_deliveryStatus === 'DELIVERED') summary.delivered += count;
-      if (stat.invitation_deliveryStatus === 'FAILED') summary.failed += count;
-
-      // By method
-      const method =
-        stat.invitation_invitationMethod?.toLowerCase() as keyof typeof summary.byMethod;
-      if (summary.byMethod[method]) {
-        if (stat.invitation_deliveryStatus === 'SENT') summary.byMethod[method].sent += count;
-        if (stat.invitation_deliveryStatus === 'DELIVERED')
-          summary.byMethod[method].delivered += count;
-        if (stat.invitation_deliveryStatus === 'FAILED') summary.byMethod[method].failed += count;
-      }
-    });
-
-    // Get check-in count
-    summary.checkedIn = await this.invitationRepository.count({
-      where: {
-        eventId,
-        checkInTime: Not(IsNull()),
-      },
-    });
-
-    return summary;
   }
 
   /**
    * Send reminders to pending guests
    */
-  async sendReminders(eventId: string, userId: string): Promise<{ sent: number; failed: number }> {
+  async sendReminders(
+    eventId: string,
+    userId: string
+  ): Promise<{ sent: number; failed: number }> {
     // Verify event ownership
     const event = await this.eventRepository.findOne({
       where: { id: eventId },
@@ -919,8 +954,8 @@ export class InvitationService {
       where: {
         eventId,
         rsvpStatus: RSVPStatus.PENDING,
-        deliveryStatus: In([DeliveryStatus.SENT, DeliveryStatus.DELIVERED]),
-      }, // Only resend to successfully delivered invitations
+      },
+      relations: ['event', 'event.user'],
     });
 
     let sent = 0;
@@ -932,11 +967,8 @@ export class InvitationService {
         sent++;
       } catch (error) {
         failed++;
-        logger.error(`Failed to send reminder for invitation ${invitation.id}:`, error);
       }
     }
-
-    logger.info(`Reminders sent for event ${eventId}: ${sent} successful, ${failed} failed`);
 
     return { sent, failed };
   }
@@ -958,8 +990,8 @@ export class InvitationService {
       throw new AppError('Access denied to this invitation', 403, 'INVITATION_ACCESS_DENIED');
     }
 
-    // Update event RSVP count if invitation was accepted
-    if (invitation.rsvpStatus === RSVPStatus.ACCEPTED) {
+    // If invitation was accepted, update event RSVP count
+    if (invitation.rsvpStatus === 'ACCEPTED') {
       const event = await this.eventRepository.findOne({ where: { id: invitation.eventId } });
       if (event) {
         event.currentRsvpCount = Math.max(
@@ -970,8 +1002,7 @@ export class InvitationService {
       }
     }
 
-    // Delete invitation
-    await this.invitationRepository.delete({ id: invitationId });
+    await this.invitationRepository.remove(invitation);
 
     logger.info(`Invitation deleted: ${invitationId}`);
 
@@ -981,7 +1012,7 @@ export class InvitationService {
   /**
    * Format invitation response
    */
-  private formatInvitationResponse(invitation: any): InvitationResponse {
+  private formatInvitationResponse(invitation: Invitation): InvitationResponse {
     return {
       id: invitation.id,
       eventId: invitation.eventId,
@@ -997,6 +1028,9 @@ export class InvitationService {
       qrCode: invitation.qrCode,
       checkInTime: invitation.checkInTime,
       specialRequirements: invitation.specialRequirements,
+      cardUrl: invitation.cardUrl,
+      createdAt: invitation.createdAt,
+      updatedAt: invitation.updatedAt,
     };
   }
 }
