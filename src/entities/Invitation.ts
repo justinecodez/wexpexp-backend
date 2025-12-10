@@ -68,6 +68,9 @@ export class Invitation {
   @Column({ name: 'card_url', nullable: true })
   cardUrl!: string;
 
+  @Column({ name: 'personalized_message', type: 'text', nullable: true })
+  personalizedMessage!: string;
+
   @Column({ name: 'token', nullable: true })
   token!: string;
 

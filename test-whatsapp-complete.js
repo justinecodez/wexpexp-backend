@@ -110,15 +110,15 @@ async function testWhatsAppImageUrl() {
 async function checkWhatsAppConfig() {
     console.log('\n🔍 Checking WhatsApp Configuration...');
     const config = {
-        WHATSAPP_TOKEN: process.env.WHATSAPP_TOKEN ? '✅ Set' : '❌ Missing',
-        WHATSAPP_PHONE_ID: process.env.WHATSAPP_PHONE_ID ? '✅ Set' : '❌ Missing',
+        WHATSAPP_ACCESS_TOKEN: process.env.WHATSAPP_ACCESS_TOKEN ? '✅ Set' : '❌ Missing',
+        WHATSAPP_PHONE_ID: process.env.WHATSAPP_PHONE_NUMBER_ID ? '✅ Set' : '❌ Missing',
         WHATSAPP_VERIFY_TOKEN: process.env.WHATSAPP_VERIFY_TOKEN ? '✅ Set' : '❌ Missing',
         WHATSAPP_API_VERSION: process.env.WHATSAPP_API_VERSION || 'v18.0 (default)'
     };
     
     console.table(config);
     
-    const allConfigured = process.env.WHATSAPP_TOKEN && process.env.WHATSAPP_PHONE_ID;
+    const allConfigured = process.env.WHATSAPP_ACCESS_TOKEN && process.env.WHATSAPP_PHONE_ID;
     if (!allConfigured) {
         console.log('\n⚠️  WhatsApp is not fully configured!');
         console.log('Please set the following in your .env file:');

@@ -4,6 +4,7 @@ import communicationService from '../services/communicationService';
 import { getDefaultSMSService } from '../services/smsService';
 import MessageTemplates from '../utils/messageTemplates';
 import logger from '../config/logger';
+import { AuthenticatedRequest } from '../types';
 
 export class MessagingController {
 
@@ -463,7 +464,7 @@ export class MessagingController {
    * Send WhatsApp message directly
    * POST /api/messaging/whatsapp/direct
    */
-  async sendWhatsAppDirect(req: Request, res: Response, next: NextFunction): Promise<void> {
+  async sendWhatsAppDirect(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const { to, message, mediaUrl } = req.body;
 
@@ -471,12 +472,15 @@ export class MessagingController {
         throw new AppError('Phone number and message are required', 400, 'MISSING_REQUIRED_FIELDS');
       }
 
+      // Get userId from authenticated request
+      const userId = req.user?.userId;
+
       const results = await communicationService.sendWhatsApp({
         to: Array.isArray(to) ? to : [to],
         message,
         type: 'text',
         mediaUrl
-      });
+      }, userId); // Pass userId to store message in chat database
 
       res.status(200).json({
         success: true,

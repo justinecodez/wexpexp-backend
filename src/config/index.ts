@@ -170,8 +170,8 @@ const config: Config = {
 
   // WhatsApp
   whatsapp: {
-    token: process.env.WHATSAPP_TOKEN || '',
-    phoneId: process.env.WHATSAPP_PHONE_ID || '',
+    token: process.env.WHATSAPP_ACCESS_TOKEN || '',
+    phoneId: process.env.WHATSAPP_PHONE_NUMBER_ID || '',
     verifyToken: process.env.WHATSAPP_VERIFY_TOKEN || '',
   },
 

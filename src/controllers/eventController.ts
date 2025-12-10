@@ -423,8 +423,17 @@ export class EventController {
       const jobData = {
         jobId: `evt_${event.id}_guest_${guest.id}`,
         eventId: event.id,
-        guestId: guest.id,
+        invitationId: guest.id,
         guestName: guest.guestName,
+        guestEmail: guest.guestEmail,
+        guestData: {
+          name: guest.guestName,
+          email: guest.guestEmail,
+          phone: guest.guestPhone,
+          date: event.startDate, // Assuming event has startDate
+          venue: event.venueName, // Assuming event has venueName
+          city: event.venueCity,
+        },
         templateConfig: event.templateConfig,
         s3Config: {
           bucketName: s3Config.bucketName,

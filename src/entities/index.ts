@@ -17,6 +17,8 @@ export { LandingPageContent } from './LandingPageContent';
 export { Notification } from './Notification';
 export { MessageLog } from './MessageLog';
 export { EventAnalytics } from './EventAnalytics';
+export { Conversation } from './Conversation';
+export { Message, MessageDirection, MessageStatus } from './Message';
 export { ECardTemplate } from './ECardTemplate';
 
 // Export enums separately
@@ -42,6 +44,8 @@ import { Notification } from './Notification';
 import { MessageLog } from './MessageLog';
 import { EventAnalytics } from './EventAnalytics';
 import { ECardTemplate } from './ECardTemplate';
+import { Conversation } from './Conversation';
+import { Message } from './Message';
 
 export const entityClasses = [
   User,
@@ -63,4 +67,6 @@ export const entityClasses = [
   MessageLog,
   EventAnalytics,
   ECardTemplate,
+  Conversation,
+  Message,
 ];

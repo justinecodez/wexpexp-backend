@@ -24,11 +24,14 @@ const QUEUE_NAME = 'invitation_queue';
 
 export interface CardGenerationJob {
   jobId: string;
+  batchId?: string; // Add batchId for tracking
   eventId: string;
+  eventTitle?: string; // Event name for file path
   invitationId: string;
   guestName: string;
   guestEmail?: string;
   guestData: Record<string, string>;
+  messageTemplate?: string; // Optional message template for auto-generation
   templateConfig: {
     canvasSize: { width: number; height: number };
     backgroundImageSrc: string | null;
@@ -64,12 +67,12 @@ export class CardGenerationService {
   async queueCardGeneration(job: CardGenerationJob): Promise<string> {
     try {
       const jobData = JSON.stringify(job);
-      
+
       // Push to Redis list (FIFO queue)
       await redis.rpush(QUEUE_NAME, jobData);
-      
+
       logger.info(`✅ Queued card generation job: ${job.jobId} for ${job.guestName}`);
-      
+
       return job.jobId;
     } catch (error: any) {
       logger.error(`❌ Failed to queue card generation: ${error.message}`);
@@ -82,6 +85,7 @@ export class CardGenerationService {
    */
   async queueBatchCardGeneration(
     eventId: string,
+    eventTitle: string,
     invitations: Array<{
       id: string;
       guestName: string;
@@ -89,16 +93,18 @@ export class CardGenerationService {
       guestPhone?: string;
       [key: string]: any;
     }>,
-    templateConfig: CardGenerationJob['templateConfig']
+    templateConfig: CardGenerationJob['templateConfig'],
+    messageTemplate?: string // Optional message template for auto-generation
   ): Promise<{
     batchId: string;
     jobIds: string[];
     queuedCount: number;
+    totalJobs: number;
   }> {
     try {
       const batchId = uuidv4();
       const jobIds: string[] = [];
-      
+
       // Storage configuration - using local storage now (no longer needed for Backblaze)
       // Keeping s3Config structure for compatibility, but worker will use local storage
       const s3Config = {
@@ -108,13 +114,13 @@ export class CardGenerationService {
         secretAccessKey: '', // Not used for local storage
         useLocalStorage: true, // Flag to indicate local storage
       };
-      
+
       logger.info(`🚀 Starting batch card generation: ${batchId} for ${invitations.length} guests`);
-      
+
       // Queue a job for each invitation
       for (const invitation of invitations) {
         const jobId = `${batchId}-${invitation.id}`;
-        
+
         // Prepare guest data for variable substitution
         const guestData: Record<string, string> = {
           name: invitation.guestName,
@@ -123,22 +129,25 @@ export class CardGenerationService {
           status: invitation.rsvpStatus || 'pending',
           // Add more fields as needed from invitation
         };
-        
+
         const job: CardGenerationJob = {
           jobId,
+          batchId, // Include batchId in job data
           eventId,
+          eventTitle, // Include event title for file path
           invitationId: invitation.id,
           guestName: invitation.guestName,
           guestEmail: invitation.guestEmail,
           guestData,
+          messageTemplate, // Include message template for auto-generation
           templateConfig,
           s3Config,
         };
-        
+
         await this.queueCardGeneration(job);
         jobIds.push(jobId);
       }
-      
+
       // Store batch metadata
       const batchMetadata = {
         batchId,
@@ -148,19 +157,31 @@ export class CardGenerationService {
         status: 'queued',
         queuedAt: new Date().toISOString(),
       };
-      
+
       await redis.setex(
         `batch:${batchId}`,
         3600, // TTL: 1 hour
         JSON.stringify(batchMetadata)
       );
-      
+
+      // Initialize batch progress counters
+      await redis.set(`batch:${batchId}:total`, invitations.length);
+      await redis.set(`batch:${batchId}:completed`, 0);
+      await redis.set(`batch:${batchId}:failed`, 0);
+      await redis.set(`batch:${batchId}:status`, 'queued');
+      // Set TTL for counters
+      await redis.expire(`batch:${batchId}:total`, 3600);
+      await redis.expire(`batch:${batchId}:completed`, 3600);
+      await redis.expire(`batch:${batchId}:failed`, 3600);
+      await redis.expire(`batch:${batchId}:status`, 3600);
+
       logger.info(`✅ Batch queued: ${batchId} - ${jobIds.length} jobs`);
-      
+
       return {
         batchId,
         jobIds,
         queuedCount: jobIds.length,
+        totalJobs: invitations.length, // Add totalJobs for frontend compatibility
       };
     } catch (error: any) {
       logger.error(`❌ Failed to queue batch generation: ${error.message}`);
@@ -182,7 +203,7 @@ export class CardGenerationService {
     try {
       // Get batch metadata
       const metadataStr = await redis.get(`batch:${batchId}`);
-      
+
       if (!metadataStr) {
         return {
           batchId,
@@ -193,40 +214,47 @@ export class CardGenerationService {
           results: [],
         };
       }
-      
+
       const metadata = JSON.parse(metadataStr);
-      const results: Array<any> = [];
-      let completedCount = 0;
-      let failedCount = 0;
-      
-      // Check status of each job
-      for (const jobId of metadata.jobIds) {
-        const resultStr = await redis.get(`job_result:${jobId}`);
-        
-        if (resultStr) {
-          const result = JSON.parse(resultStr);
-          results.push({
-            jobId,
-            ...result,
-          });
-          
-          if (result.success) {
-            completedCount++;
-          } else {
-            failedCount++;
-          }
-        }
-      }
-      
+      // Get batch progress from counters
+      const [completedStr, failedStr] = await Promise.all([
+        redis.get(`batch:${batchId}:completed`),
+        redis.get(`batch:${batchId}:failed`)
+      ]);
+
+      const completedCount = parseInt(completedStr || '0');
+      const failedCount = parseInt(failedStr || '0');
+
       // Determine overall status
       let status: 'queued' | 'processing' | 'completed' | 'failed' = 'queued';
-      
-      if (completedCount + failedCount === metadata.totalJobs) {
+
+      if (completedCount + failedCount >= metadata.totalJobs && metadata.totalJobs > 0) {
         status = failedCount > 0 ? 'failed' : 'completed';
       } else if (completedCount + failedCount > 0) {
         status = 'processing';
       }
-      
+
+      // Get results for completed/failed jobs (optional, maybe limit to recent or failed ones if needed)
+      // For now, we'll skip fetching all results to keep it fast, or fetch only if needed.
+      // The frontend mainly needs the counts and status.
+      // If results are needed, we can fetch them, but for large batches it's heavy.
+      // Let's fetch results only if the batch is small or if specifically requested.
+      // For this implementation, we will fetch results as the frontend might need card URLs.
+
+      const results: Array<any> = [];
+      if (metadata.jobIds) {
+        for (const jobId of metadata.jobIds) {
+          const resultStr = await redis.get(`job_result:${jobId}`);
+          if (resultStr) {
+            const result = JSON.parse(resultStr);
+            results.push({
+              jobId,
+              ...result,
+            });
+          }
+        }
+      }
+
       return {
         batchId,
         totalJobs: metadata.totalJobs,

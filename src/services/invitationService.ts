@@ -851,9 +851,13 @@ export class InvitationService {
   }
 
   /**
-   * Update invitation card URL (called by worker)
+   * Update invitation card URL and personalized message (called by worker)
    */
-  async updateInvitationCardUrl(invitationId: string, cardUrl: string): Promise<any> {
+  async updateInvitationCardUrl(
+    invitationId: string, 
+    cardUrl: string, 
+    personalizedMessage?: string
+  ): Promise<any> {
     const invitation = await this.invitationRepository.findOne({
       where: { id: invitationId },
     });
@@ -864,9 +868,15 @@ export class InvitationService {
 
     // Update card URL
     invitation.cardUrl = cardUrl;
+    
+    // Update personalized message if provided
+    if (personalizedMessage !== undefined) {
+      invitation.personalizedMessage = personalizedMessage;
+    }
+    
     await this.invitationRepository.save(invitation);
 
-    logger.info(`Card URL updated for invitation: ${invitationId}`);
+    logger.info(`Card URL and personalized message updated for invitation: ${invitationId}`);
 
     return this.formatInvitationResponse(invitation);
   }

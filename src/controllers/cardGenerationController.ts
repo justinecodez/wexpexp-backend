@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import cardGenerationService from '../services/cardGenerationService';
 import invitationService from '../services/invitationService';
+import eventService from '../services/eventService';
 import { AppError } from '../middleware/errorHandler';
 import { AuthenticatedRequest } from '../types';
 import logger from '../config/logger';
@@ -19,7 +20,7 @@ export class CardGenerationController {
         });
       }
 
-      const { eventId, invitationIds, templateConfig } = req.body;
+      const { eventId, invitationIds, templateConfig, messageTemplate } = req.body;
 
       if (!eventId || !templateConfig) {
         throw new AppError('Event ID and template config are required', 400, 'MISSING_REQUIRED_FIELDS');
@@ -45,13 +46,19 @@ export class CardGenerationController {
         throw new AppError('No invitations found', 404, 'NO_INVITATIONS');
       }
 
+      // Get event to retrieve title for file path
+      const event = await eventService.getEventById(eventId, req.user.userId);
+      const eventTitle = event?.title || 'Event';
+
       logger.info(`🎨 Queueing batch card generation for ${invitations.length} guests`);
 
-      // Queue the batch generation
+      // Queue the batch generation (with optional message template)
       const result = await cardGenerationService.queueBatchCardGeneration(
         eventId,
+        eventTitle,
         invitations,
-        templateConfig
+        templateConfig,
+        messageTemplate // Pass message template for auto-generation
       );
 
       res.status(200).json({
@@ -79,11 +86,23 @@ export class CardGenerationController {
 
       const { batchId } = req.params;
 
-      const status = await cardGenerationService.getBatchStatus(batchId);
+      const batchStatus = await cardGenerationService.getBatchStatus(batchId);
+
+      // Transform backend status to frontend format
+      const frontendStatus = {
+        status: batchStatus.status === 'processing' 
+          ? 'in_progress' 
+          : batchStatus.status === 'queued' 
+          ? 'pending' 
+          : batchStatus.status,
+        total: batchStatus.totalJobs,
+        completed: batchStatus.completedJobs,
+        failed: batchStatus.failedJobs,
+      };
 
       res.status(200).json({
         success: true,
-        data: status,
+        data: frontendStatus,
       });
     } catch (error) {
       next(error);

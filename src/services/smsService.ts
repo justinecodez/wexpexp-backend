@@ -97,24 +97,36 @@ export class SMSService {
       }
 
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorDetails = axios.isAxiosError(error) 
+        ? {
+            status: error.response?.status,
+            statusText: error.response?.statusText,
+            data: error.response?.data,
+            message: error.message,
+          }
+        : { message: errorMessage };
+
       logger.error('SMS sending failed:', {
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: errorMessage,
         to: message.to,
         reference: message.reference,
+        details: errorDetails,
         stack: error instanceof Error ? error.stack : undefined
       });
 
       if (axios.isAxiosError(error)) {
+        const apiError = error.response?.data?.message || error.response?.data?.error || error.message;
         return {
           success: false,
-          error: error.response?.data?.message || error.message,
+          error: apiError,
           details: error.response?.data
         };
       }
 
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error sending SMS'
+        error: errorMessage
       };
     }
   }

@@ -37,6 +37,7 @@ import communicationRoutes from './routes/communications';
 import messagingRoutes from './routes/messagingRoutes';
 import webhookRoutes from './routes/webhooks';
 import whatsappRoutes from './routes/whatsapp.routes';
+import conversationRoutes from './routes/conversations';
 
 // Import Socket.IO service
 import SocketService from './services/socketService';
@@ -74,10 +75,11 @@ class App {
             defaultSrc: ["'self'"],
             styleSrc: ["'self'", "'unsafe-inline'"],
             scriptSrc: ["'self'"],
-            imgSrc: ["'self'", 'data:', 'https:'],
+            imgSrc: ["'self'", 'data:', 'https:', 'http://localhost:3001', 'http://127.0.0.1:3001'],
           },
         },
         crossOriginEmbedderPolicy: false,
+        crossOriginResourcePolicy: { policy: "cross-origin" },
       })
     );
 
@@ -93,8 +95,28 @@ class App {
     this.app.use(express.json({ limit: '50mb' }));
     this.app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-    // Static files
-    this.app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+    // Handle OPTIONS requests for static files
+    this.app.options('/uploads/*', (req, res) => {
+      const origin = req.headers.origin;
+      if (origin && (origin.includes('localhost') || origin.includes('127.0.0.1'))) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+      }
+      res.status(200).end();
+    });
+
+    // Static files with CORS headers
+    this.app.use('/uploads', express.static(path.join(process.cwd(), 'uploads'), {
+      setHeaders: (res, path) => {
+        // Set CORS headers for all static file responses
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+        res.setHeader('Cache-Control', 'public, max-age=31536000');
+      }
+    }));
     this.app.use('/public', express.static(path.join(process.cwd(), 'public')));
 
     // HTTP request logger
@@ -213,6 +235,7 @@ class App {
     this.app.use('/api/communications', communicationRoutes);
     this.app.use('/api/messaging', messagingRoutes);
     this.app.use('/api/whatsapp', whatsappRoutes);
+    this.app.use('/api/conversations', conversationRoutes);
     this.app.use('/webhooks', webhookRoutes); // WhatsApp webhook (no /api prefix)
     
     // Card generation routes

@@ -402,7 +402,7 @@ export class InvitationController {
   updateCardUrl = catchAsync(
     async (req: Request, res: Response, next: NextFunction) => {
       const { id } = req.params;
-      const { cardUrl } = req.body;
+      const { cardUrl, personalizedMessage } = req.body;
 
       if (!cardUrl) {
         return res.status(400).json({
@@ -411,12 +411,16 @@ export class InvitationController {
         });
       }
 
-      // Update invitation with card URL
-      const invitation = await invitationService.updateInvitationCardUrl(id, cardUrl);
+      // Update invitation with card URL and optional personalized message
+      const invitation = await invitationService.updateInvitationCardUrl(
+        id, 
+        cardUrl, 
+        personalizedMessage
+      );
 
       const response: ApiResponse = {
         success: true,
-        message: 'Card URL updated successfully',
+        message: 'Card URL and personalized message updated successfully',
         data: { invitation },
       };
 

@@ -179,10 +179,44 @@ export class CommunicationService {
     const recipients = Array.isArray(smsData.to) ? smsData.to : [smsData.to];
     const results: MessageResponse[] = [];
 
-    for (const recipient of recipients) {
+    // Add delay between requests to avoid rate limiting (100ms delay)
+    const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+    for (let i = 0; i < recipients.length; i++) {
+      const recipient = recipients[i];
+      
+      // Add delay between requests (except for the first one)
+      if (i > 0) {
+        await delay(100); // 100ms delay between requests
+      }
+
       try {
         // Use phone number as provided (no validation)
         const formattedPhone = recipient.trim();
+        
+        if (!formattedPhone) {
+          logger.warn(`Skipping empty phone number at index ${i}`);
+          
+          // Create a message log entry for the failed attempt
+          const messageLog = await this.messageLogRepository.save(
+            this.messageLogRepository.create({
+              recipientType: 'phone',
+              recipient: recipient || 'empty',
+              method: InvitationMethod.SMS,
+              content: smsData.message,
+              status: DeliveryStatus.FAILED,
+              errorMessage: 'Empty phone number',
+            })
+          );
+          
+          results.push({
+            id: messageLog.id,
+            status: DeliveryStatus.FAILED,
+            errorMessage: 'Empty phone number',
+          });
+          continue;
+        }
+
         let response;
 
         // Choose SMS provider based on configuration
@@ -216,8 +250,19 @@ export class CommunicationService {
           errorMessage: response.success ? undefined : response.error,
         });
 
-        logger.info(`SMS ${response.success ? 'sent' : 'failed'} to ${formattedPhone}`);
+        logger.info(`SMS ${response.success ? 'sent' : 'failed'} to ${formattedPhone}${response.error ? `: ${response.error}` : ''}`);
       } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        const errorDetails = error instanceof Error ? error.stack : String(error);
+        
+        // Enhanced error logging
+        logger.error(`Failed to send SMS to ${recipient}:`, {
+          error: errorMessage,
+          details: errorDetails,
+          phone: recipient,
+          messageLength: smsData.message?.length || 0,
+        });
+
         // Log failed message
         const messageLog = await this.messageLogRepository.save(
           this.messageLogRepository.create({
@@ -226,17 +271,15 @@ export class CommunicationService {
             method: InvitationMethod.SMS,
             content: smsData.message,
             status: DeliveryStatus.FAILED,
-            errorMessage: error instanceof Error ? error.message : 'Unknown error',
+            errorMessage: errorMessage,
           })
         );
 
         results.push({
           id: messageLog.id,
           status: DeliveryStatus.FAILED,
-          errorMessage: error instanceof Error ? error.message : 'Unknown error',
+          errorMessage: errorMessage,
         });
-
-        logger.error(`Failed to send SMS to ${recipient}:`, error);
       }
     }
 
@@ -246,7 +289,7 @@ export class CommunicationService {
   /**
    * Send WhatsApp message
    */
-  async sendWhatsApp(whatsappData: WhatsAppRequest): Promise<MessageResponse[]> {
+  async sendWhatsApp(whatsappData: WhatsAppRequest, userId?: string): Promise<MessageResponse[]> {
     const recipients = Array.isArray(whatsappData.to) ? whatsappData.to : [whatsappData.to];
     const results: MessageResponse[] = [];
 
@@ -256,7 +299,44 @@ export class CommunicationService {
         const formattedPhone = recipient.trim().replace('+', ''); // Remove + for WhatsApp API
         const response = await this.sendWhatsAppMessage(formattedPhone, whatsappData);
 
-        // Log message
+        // Check if message failed due to 24-hour window restriction
+        if (response.requiresTemplate) {
+          logger.warn(`⏰ Cannot send regular message to ${recipient.trim()} - 24-hour window expired. Template required.`);
+          
+          // Log the failed attempt
+          const messageLogData = {
+            recipientType: 'phone',
+            recipient: recipient.trim(),
+            method: InvitationMethod.WHATSAPP,
+            content: whatsappData.message,
+            status: DeliveryStatus.FAILED,
+            errorMessage: response.metadata?.errorMessage || '24-hour messaging window expired. Template message required.',
+            metadata: {
+              ...response.metadata,
+              requiresTemplate: true,
+              errorCode: 131047,
+            },
+          };
+          const savedMessageLog = await this.messageLogRepository.save(messageLogData);
+
+          results.push({
+            id: savedMessageLog.id,
+            status: 'FAILED',
+            errorMessage: response.metadata?.errorMessage || 'More than 24 hours have passed since the customer last replied. Please use an approved WhatsApp template message instead.',
+            metadata: {
+              requiresTemplate: true,
+              errorCode: 131047,
+            },
+          });
+
+          logger.info(`WhatsApp message blocked (24-hour window) for ${recipient.trim()}`);
+          continue; // Skip to next recipient
+        }
+
+        // Get WhatsApp message ID from response
+        const whatsappMessageId = response.metadata?.messageId || response.metadata?.fullResponse?.messages?.[0]?.id;
+
+        // Log message in MessageLog (for general communication history)
         const messageLogData = {
           recipientType: 'phone',
           recipient: recipient.trim(),
@@ -268,6 +348,29 @@ export class CommunicationService {
           metadata: response.metadata,
         };
         const savedMessageLog = await this.messageLogRepository.save(messageLogData);
+
+        // Also store in Message table (for chat system and webhook status updates) if userId is provided
+        if (userId && response.success && whatsappMessageId) {
+          try {
+            // Lazy import to avoid circular dependency
+            const conversationService = (await import('./conversationService')).default;
+            await conversationService.storeOutgoingMessage(
+              userId,
+              formattedPhone,
+              whatsappData.message,
+              whatsappMessageId,
+              whatsappData.mediaUrl ? 'image' : 'text',
+              {
+                mediaUrl: whatsappData.mediaUrl,
+                sentFrom: 'communications_page',
+              }
+            );
+            logger.info(`✅ Stored WhatsApp message in chat database for webhook tracking: ${whatsappMessageId}`);
+          } catch (chatError: any) {
+            // Don't fail the entire send if chat storage fails
+            logger.warn(`⚠️ Failed to store message in chat database (non-critical): ${chatError.message}`);
+          }
+        }
 
         results.push({
           id: savedMessageLog.id,
@@ -424,11 +527,41 @@ export class CommunicationService {
   private async sendWhatsAppMessage(
     phone: string,
     data: WhatsAppRequest
-  ): Promise<{ success: boolean; error?: string; metadata?: any }> {
+  ): Promise<{ success: boolean; error?: string; metadata?: any; requiresTemplate?: boolean }> {
     try {
       // Check if WhatsApp service is configured (basic check)
       if (!config.whatsapp.token || !config.whatsapp.phoneId) {
         throw new Error('WhatsApp Business API credentials not configured');
+      }
+
+      // Check if we need to use a template message (24-hour window)
+      let requiresTemplate = false;
+      if (data.type !== 'template') {
+        try {
+          const conversationService = (await import('./conversationService')).default;
+          requiresTemplate = await conversationService.requiresTemplateMessage(phone);
+          
+          if (requiresTemplate) {
+            logger.warn(`⏰ 24-hour window expired for ${phone}. Template message required.`, {
+              phone,
+              message: 'Regular text messages cannot be sent. Use an approved template instead.',
+            });
+            
+            return {
+              success: false,
+              error: 'MESSAGE_WINDOW_EXPIRED',
+              metadata: {
+                errorCode: 131047,
+                errorMessage: 'More than 24 hours have passed since the customer last replied. Please use an approved WhatsApp template message instead.',
+                requiresTemplate: true,
+              },
+              requiresTemplate: true,
+            };
+          }
+        } catch (checkError: any) {
+          // If we can't check, log but continue (might be a new conversation)
+          logger.debug(`Could not check 24-hour window for ${phone}:`, checkError.message);
+        }
       }
 
       let response;
@@ -464,19 +597,39 @@ export class CommunicationService {
         );
       }
 
+      console.log('WhatsApp response==========================================>', response);
+
+      logger.info(`✅ WhatsApp message sent successfully to ${phone}`, {
+        phone,
+        messageId: response.messages?.[0]?.id,
+        messageStatus: response.messages?.[0]?.message_status,
+        fullResponse: JSON.stringify(response, null, 2),
+        requestType: data.type || 'text',
+        hasMedia: !!data.mediaUrl,
+      });
+
       return {
         success: true,
         metadata: {
           messageId: response.messages?.[0]?.id,
-          provider: 'whatsapp_business_api'
+          messageStatus: response.messages?.[0]?.message_status,
+          provider: 'whatsapp_business_api',
+          fullResponse: response,
         },
       };
     } catch (error: any) {
-      logger.error(`WhatsApp API error for ${phone}:`, {
-        message: error.message,
-        response: error.response?.data ? JSON.stringify(error.response.data) : 'No response data',
+      logger.error(`❌ WhatsApp API error for ${phone}:`, {
+        phone,
+        errorMessage: error.message,
+        errorCode: error.code,
         status: error.response?.status,
-        headers: error.response?.headers
+        statusText: error.response?.statusText,
+        responseHeaders: error.response?.headers ? JSON.stringify(error.response.headers) : 'No headers',
+        responseData: error.response?.data ? JSON.stringify(error.response.data, null, 2) : 'No response data',
+        errorDetails: error.response?.data?.error ? JSON.stringify(error.response.data.error, null, 2) : 'No error details',
+        requestType: data.type || 'text',
+        hasMedia: !!data.mediaUrl,
+        fullError: error.stack,
       });
       return {
         success: false,

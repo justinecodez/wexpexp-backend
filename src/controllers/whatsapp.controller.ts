@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import logger from '../config/logger';
 import { WhatsAppService } from '../services/whatsapp.service';
+import config from '../config';
 
 export class WhatsAppController {
     private whatsAppService: WhatsAppService;
@@ -14,23 +15,38 @@ export class WhatsAppController {
      * GET /webhooks/whatsapp?hub.mode=subscribe&hub.challenge=CHALLENGE&hub.verify_token=TOKEN
      */
     verifyWebhook = (req: Request, res: Response): void => {
-        const mode = req.query['hub.mode'];
-        const token = req.query['hub.verify_token'];
-        const challenge = req.query['hub.challenge'];
+        // Extract query parameters and ensure they're strings
+        const mode = typeof req.query['hub.mode'] === 'string' ? req.query['hub.mode'] : undefined;
+        const token = typeof req.query['hub.verify_token'] === 'string' ? req.query['hub.verify_token'] : undefined;
+        const challenge = typeof req.query['hub.challenge'] === 'string' ? req.query['hub.challenge'] : undefined;
 
-        const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN || 'wexp_webhook_secret_2024';
+        const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN || config.whatsapp.verifyToken || 'wexp_webhook_secret_2024';
 
-        logger.info('WhatsApp webhook verification attempt', {
+        logger.info('🔐 WhatsApp Webhook Verification Request', {
             mode,
+            receivedToken: token ? `***${token.slice(-4)}` : 'MISSING',
+            expectedToken: verifyToken ? `***${verifyToken.slice(-4)}` : 'MISSING',
             tokenMatch: token === verifyToken,
+            challenge: challenge,
+            queryParams: JSON.stringify(req.query),
         });
 
         // Check if mode and token are correct
-        if (mode === 'subscribe' && token === verifyToken) {
-            logger.info('WhatsApp webhook verified successfully');
-            res.status(200).send(challenge);
+        if (mode === 'subscribe' && token === verifyToken && challenge) {
+            logger.info('✅ WhatsApp webhook verified successfully - Challenge returned', {
+                challenge: challenge,
+            });
+            // Return challenge as plain text (not JSON)
+            res.status(200).type('text/plain').send(challenge);
         } else {
-            logger.warn('WhatsApp webhook verification failed');
+            logger.warn('❌ WhatsApp webhook verification failed', {
+                reason: mode !== 'subscribe' ? 'Invalid mode' : token !== verifyToken ? 'Token mismatch' : 'Missing challenge',
+                mode,
+                receivedToken: token || 'MISSING',
+                expectedToken: verifyToken,
+                tokenMatch: token === verifyToken,
+                hasChallenge: !!challenge,
+            });
             res.sendStatus(403);
         }
     };
@@ -40,12 +56,15 @@ export class WhatsAppController {
      * POST /webhooks/whatsapp
      */
     handleWebhook = async (req: Request, res: Response): Promise<void> => {
+        const startTime = Date.now();
         try {
             const body = req.body;
 
-            logger.info('WhatsApp webhook received', {
+            logger.info('📥 WhatsApp Webhook Event Received', {
                 object: body.object,
-                entries: body.entry?.length || 0,
+                entriesCount: body.entry?.length || 0,
+                fullBody: JSON.stringify(body, null, 2),
+                headers: JSON.stringify(req.headers),
             });
 
             // Respond quickly to Meta (they expect 200 within 20 seconds)
@@ -54,13 +73,39 @@ export class WhatsAppController {
             // Process webhook asynchronously
             if (body.object === 'whatsapp_business_account') {
                 for (const entry of body.entry || []) {
+                    logger.info('📋 Processing webhook entry', {
+                        entryId: entry.id,
+                        changesCount: entry.changes?.length || 0,
+                    });
+
                     for (const change of entry.changes || []) {
+                        logger.info('🔄 Processing webhook change', {
+                            field: change.field,
+                            value: JSON.stringify(change.value, null, 2),
+                        });
+
                         await this.whatsAppService.processWebhookChange(change);
                     }
                 }
+            } else {
+                logger.warn('⚠️ Unknown webhook object type', {
+                    object: body.object,
+                    body: JSON.stringify(body, null, 2),
+                });
             }
-        } catch (error) {
-            logger.error('Error handling WhatsApp webhook:', error);
+
+            const processingTime = Date.now() - startTime;
+            logger.info('✅ WhatsApp webhook processed successfully', {
+                processingTime: `${processingTime}ms`,
+            });
+        } catch (error: any) {
+            const processingTime = Date.now() - startTime;
+            logger.error('❌ Error handling WhatsApp webhook:', {
+                error: error.message,
+                stack: error.stack,
+                processingTime: `${processingTime}ms`,
+                body: JSON.stringify(req.body, null, 2),
+            });
             // Still send 200 to Meta to avoid retries
             res.sendStatus(200);
         }

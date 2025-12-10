@@ -3,7 +3,7 @@ import { Request, Response } from 'express';
 import config from '../config';
 import logger from '../config/logger';
 
-// General rate limiter
+// General rate limiter (excludes chat routes which have their own limiter)
 export const generalLimiter = rateLimit({
   windowMs: config.rateLimit.windowMs,
   max: config.rateLimit.maxRequests,
@@ -13,6 +13,10 @@ export const generalLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req: Request) => {
+    // Skip rate limiting for chat routes (they have their own limiter)
+    return req.path.startsWith('/api/conversations');
+  },
   handler: (req: Request, res: Response) => {
     logger.warn(`Rate limit exceeded for IP: ${req.ip}`);
     res.status(429).json({
@@ -183,6 +187,26 @@ export const createRateLimiter = (
   });
 };
 
+// Chat/Conversation rate limiter - more lenient for real-time chat
+export const chatLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 60, // Allow 60 requests per minute (1 per second average)
+  message: {
+    success: false,
+    error: 'Too many chat requests, please slow down.',
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: false,
+  handler: (req: Request, res: Response) => {
+    logger.warn(`Chat rate limit exceeded for IP: ${req.ip} on ${req.path}`);
+    res.status(429).json({
+      success: false,
+      error: 'Too many chat requests, please slow down.',
+    });
+  },
+});
+
 // Export grouped rate limiters for easier import
 export const rateLimiter = {
   general: generalLimiter,
@@ -191,5 +215,6 @@ export const rateLimiter = {
   sms: smsLimiter,
   messaging: messagingLimiter,
   upload: uploadLimiter,
-  api: apiLimiter
+  api: apiLimiter,
+  chat: chatLimiter,
 };

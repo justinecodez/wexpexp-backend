@@ -281,6 +281,11 @@ export interface MessageResponse {
   status: string;
   deliveredAt?: Date;
   errorMessage?: string;
+  metadata?: {
+    requiresTemplate?: boolean;
+    errorCode?: number;
+    [key: string]: any;
+  };
 }
 
 // File Upload Types
