@@ -466,10 +466,38 @@ export class MessagingController {
    */
   async sendWhatsAppDirect(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { to, message, mediaUrl } = req.body;
+      const { to, message, mediaUrl, useTemplate, invitationId, eventId, templateVariables, language } = req.body;
 
-      if (!to || !message) {
-        throw new AppError('Phone number and message are required', 400, 'MISSING_REQUIRED_FIELDS');
+      logger.info('📱 WhatsApp Direct Request:', {
+        to,
+        hasMessage: !!message,
+        messageLength: message?.length || 0,
+        hasMediaUrl: !!mediaUrl,
+        useTemplate: useTemplate,
+        invitationId,
+        eventId,
+        language: language || 'en', // Default to English if not specified
+        hasTemplateVariables: !!templateVariables,
+        requestBody: JSON.stringify(req.body, null, 2)
+      });
+
+      if (!to) {
+        throw new AppError('Phone number is required', 400, 'MISSING_REQUIRED_FIELDS');
+      }
+
+      // Message is only required if not using template
+      // When using template, message is generated from template variables
+      // Check useTemplate explicitly (could be true, false, or undefined)
+      const isUsingTemplate = useTemplate === true;
+
+      if (!isUsingTemplate && !message) {
+        logger.warn('⚠️ Message validation failed:', {
+          useTemplate,
+          isUsingTemplate,
+          hasMessage: !!message,
+          messageValue: message
+        });
+        throw new AppError('Message is required when not using template', 400, 'MISSING_REQUIRED_FIELDS');
       }
 
       // Get userId from authenticated request
@@ -477,9 +505,14 @@ export class MessagingController {
 
       const results = await communicationService.sendWhatsApp({
         to: Array.isArray(to) ? to : [to],
-        message,
-        type: 'text',
-        mediaUrl
+        message: message || '', // Provide empty string if using template
+        type: useTemplate ? 'template' : 'text',
+        mediaUrl,
+        invitationId,
+        eventId,
+        useTemplate,
+        language: language || 'en', // Pass language to service (default: English)
+        templateVariables
       }, userId); // Pass userId to store message in chat database
 
       res.status(200).json({

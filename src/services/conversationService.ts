@@ -79,13 +79,13 @@ export class ConversationService {
       // Update contact name if provided and different
       // Also update if current name is just the phone number or empty
       const currentName = conversation.contactName || '';
-      const shouldUpdate = contactName && 
+      const shouldUpdate = contactName &&
         contactName.trim() !== '' &&
         contactName !== normalizedPhone &&
-        (currentName === normalizedPhone || 
-         currentName === '' ||
-         currentName !== contactName);
-      
+        (currentName === normalizedPhone ||
+          currentName === '' ||
+          currentName !== contactName);
+
       if (shouldUpdate) {
         const oldName = conversation.contactName || normalizedPhone;
         // Use update() to avoid relation cascade issues
@@ -126,7 +126,7 @@ export class ConversationService {
   ): Promise<Message> {
     try {
       logger.info(`Storing incoming message from ${phoneNumber}, type: ${messageType}`);
-      
+
       // Find user ID from phone number by looking up invitations
       let userId = await this.findUserIdFromPhone(phoneNumber);
 
@@ -175,7 +175,7 @@ export class ConversationService {
       });
 
       logger.info(`Message object created with conversationId: ${message.conversationId}, saving to database...`);
-      
+
       // Save message as plain object to avoid TypeORM relation issues
       const messageData = {
         conversationId: conversation.id,
@@ -188,7 +188,7 @@ export class ConversationService {
         sentAt: new Date(),
         deliveredAt: new Date(),
       };
-      
+
       logger.info(`Saving message with conversationId: ${messageData.conversationId}`);
       const savedMessage = await this.messageRepository.save(messageData);
       logger.info(`Message saved with ID: ${savedMessage.id}, conversationId: ${savedMessage.conversationId}`);
@@ -199,10 +199,10 @@ export class ConversationService {
         where: { id: conversation.id },
         select: ['unreadCount'],
       });
-      
+
       await this.conversationRepository.update(
         { id: conversation.id },
-        { 
+        {
           lastMessageAt: new Date(),
           unreadCount: (currentConversation?.unreadCount || 0) + 1
         }
@@ -236,7 +236,7 @@ export class ConversationService {
   ): Promise<Message> {
     try {
       logger.info(`Storing outgoing message to ${phoneNumber} for user ${userId}`);
-      
+
       const conversation = await this.getOrCreateConversation(userId, phoneNumber);
 
       if (!conversation) {
@@ -267,12 +267,12 @@ export class ConversationService {
       });
 
       logger.info(`Message object created with conversationId: ${message.conversationId}, saving to database...`);
-      
+
       // Ensure conversationId is set before saving
       if (!message.conversationId || message.conversationId.trim() === '') {
         throw new Error(`Cannot save message: conversationId is missing or empty. Conversation ID was: "${conversation.id}"`);
       }
-      
+
       // Save message as plain object to avoid TypeORM relation issues
       const messageData = {
         conversationId: conversation.id,
@@ -284,12 +284,12 @@ export class ConversationService {
         metadata,
         sentAt: new Date(),
       };
-      
+
       logger.info(`Saving message with conversationId: ${messageData.conversationId}`);
       const savedMessage = await this.messageRepository.save(messageData);
-      
+
       logger.info(`Message saved successfully with ID: ${savedMessage.id}, conversationId: ${savedMessage.conversationId}`);
-      
+
       // Verify the saved message has the conversationId
       if (!savedMessage.conversationId) {
         logger.error(`CRITICAL: Saved message has no conversationId! Message ID: ${savedMessage.id}`);
@@ -317,6 +317,84 @@ export class ConversationService {
   }
 
   /**
+   * Store an outgoing template message (auto-finds userId from phone)
+   */
+  async storeTemplateMessage(
+    phoneNumber: string,
+    whatsappMessageId: string,
+    templateName: string,
+    languageCode: string,
+    metadata?: any,
+    contactName?: string
+  ): Promise<Message | null> {
+    try {
+      logger.info(`Storing outgoing template message to ${phoneNumber}, template: ${templateName}`);
+
+      // Find user ID from phone number
+      let userId = await this.findUserIdFromPhone(phoneNumber);
+
+      // If no user found, get fallback user
+      if (!userId) {
+        const events = await this.eventRepository.find({
+          order: { createdAt: 'DESC' },
+          take: 1,
+        });
+        userId = events[0]?.userId || 'system';
+        logger.warn(`No user found for phone ${phoneNumber}, using fallback: ${userId}`);
+      }
+
+      const conversation = await this.getOrCreateConversation(
+        userId,
+        phoneNumber,
+        contactName
+      );
+
+      if (!conversation || !conversation.id) {
+        throw new Error(`Failed to get or create conversation`);
+      }
+
+      const content = `[Template: ${templateName}]`;
+
+      const messageData = {
+        conversationId: conversation.id,
+        whatsappMessageId,
+        direction: MessageDirection.OUTBOUND,
+        content,
+        messageType: 'template',
+        status: MessageStatus.SENT,
+        metadata: {
+          templateName,
+          languageCode,
+          ...metadata,
+        },
+        sentAt: new Date(),
+      };
+
+      const savedMessage = await this.messageRepository.save(messageData);
+
+      logger.info(`Stored template message to ${phoneNumber}, message ID: ${savedMessage.id}, WhatsApp ID: ${whatsappMessageId}`);
+
+      // Update conversation last message time
+      await this.conversationRepository.update(
+        { id: conversation.id },
+        { lastMessageAt: new Date() }
+      );
+
+      return savedMessage;
+    } catch (error: any) {
+      logger.error('Error storing template message:', {
+        error: error.message,
+        stack: error.stack,
+        phoneNumber,
+        templateName,
+      });
+      // Don't throw - template sending already succeeded
+      // Just log the error and return null
+      return null;
+    }
+  }
+
+  /**
    * Update message status (from webhook status updates)
    */
   async updateMessageStatus(
@@ -325,8 +403,12 @@ export class ConversationService {
     timestamp?: Date
   ): Promise<Message | null> {
     try {
-      logger.info(`Looking up message with WhatsApp ID: ${whatsappMessageId}`);
-      
+      logger.info(`🔍 Looking up message with WhatsApp ID: ${whatsappMessageId}`, {
+        whatsappMessageId,
+        targetStatus: status,
+        timestamp: timestamp?.toISOString(),
+      });
+
       const message = await this.messageRepository.findOne({
         where: { whatsappMessageId },
       });
@@ -336,17 +418,43 @@ export class ConversationService {
         const allMessages = await this.messageRepository.find({
           where: { direction: MessageDirection.OUTBOUND },
           order: { createdAt: 'DESC' },
-          take: 10,
+          take: 20,
         });
-        
-        logger.warn(`Message not found for WhatsApp ID: ${whatsappMessageId}`);
-        logger.info(`Recent outbound messages:`, allMessages.map(m => ({
-          id: m.id,
-          whatsappId: m.whatsappMessageId,
-          content: m.content.substring(0, 50),
-          createdAt: m.createdAt,
-        })));
-        
+
+        // Also search for messages with similar IDs (in case of partial matches)
+        const similarMessages = allMessages.filter(m =>
+          m.whatsappMessageId &&
+          (m.whatsappMessageId.includes(whatsappMessageId.slice(-20)) ||
+            whatsappMessageId.includes(m.whatsappMessageId.slice(-20)))
+        );
+
+        logger.warn(`⚠️ Message not found for WhatsApp ID: ${whatsappMessageId}`, {
+          whatsappMessageId,
+          searchedExact: true,
+          totalOutboundMessages: allMessages.length,
+          similarMessagesFound: similarMessages.length,
+          recentMessages: allMessages.slice(0, 10).map(m => ({
+            id: m.id,
+            whatsappId: m.whatsappMessageId,
+            content: m.content?.substring(0, 50) || '[no content]',
+            status: m.status,
+            createdAt: m.createdAt,
+            conversationId: m.conversationId,
+          })),
+          similarMessages: similarMessages.map(m => ({
+            id: m.id,
+            whatsappId: m.whatsappMessageId,
+            content: m.content?.substring(0, 50) || '[no content]',
+            createdAt: m.createdAt,
+          })),
+          possibleReasons: [
+            'Message was sent from Communications page (stored in MessageLog, not Message table)',
+            'Message was sent via template API before chat integration',
+            'Message ID mismatch or encoding issue',
+            'Message was sent from outside the chat interface',
+          ],
+        });
+
         return null;
       }
 
@@ -449,26 +557,26 @@ export class ConversationService {
   ): Promise<Message> {
     try {
       logger.info(`Sending WhatsApp message to ${phoneNumber} from user ${userId}`);
-      
+
       // First, ensure conversation exists before sending
       const conversation = await this.getOrCreateConversation(userId, phoneNumber);
-      
+
       if (!conversation || !conversation.id) {
         throw new Error(`Failed to get or create conversation for phone ${phoneNumber} and user ${userId}`);
       }
-      
+
       logger.info(`Conversation ready: ${conversation.id} for phone ${phoneNumber}`);
-      
+
       // Send via WhatsApp
       const whatsappResponse = await whatsappService.sendTextMessage(phoneNumber, content);
-      
+
       logger.info('WhatsApp API response:', {
         response: JSON.stringify(whatsappResponse, null, 2),
         messages: whatsappResponse.messages,
       });
-      
+
       // Extract message ID - try different possible response structures
-      const whatsappMessageId = 
+      const whatsappMessageId =
         whatsappResponse.messages?.[0]?.id ||
         whatsappResponse.data?.messages?.[0]?.id ||
         whatsappResponse.id ||
@@ -505,7 +613,7 @@ export class ConversationService {
   async markConversationRequiresTemplate(phoneNumber: string, requiresTemplate: boolean): Promise<void> {
     try {
       const normalizedPhone = phoneNumber.replace(/[\s+]/g, '');
-      
+
       // Find all conversations with this phone number
       const conversations = await this.conversationRepository.find({
         where: { phoneNumber: normalizedPhone },
@@ -534,7 +642,7 @@ export class ConversationService {
   async requiresTemplateMessage(phoneNumber: string): Promise<boolean> {
     try {
       const normalizedPhone = phoneNumber.replace(/[\s+]/g, '');
-      
+
       const conversation = await this.conversationRepository.findOne({
         where: { phoneNumber: normalizedPhone },
         order: { lastMessageAt: 'DESC' },

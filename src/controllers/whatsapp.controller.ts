@@ -60,11 +60,18 @@ export class WhatsAppController {
         try {
             const body = req.body;
 
-            logger.info('📥 WhatsApp Webhook Event Received', {
+            logger.info('📥 WhatsApp Webhook Event Received - Full Payload', {
                 object: body.object,
                 entriesCount: body.entry?.length || 0,
                 fullBody: JSON.stringify(body, null, 2),
-                headers: JSON.stringify(req.headers),
+                headers: {
+                    'content-type': req.headers['content-type'],
+                    'x-hub-signature-256': req.headers['x-hub-signature-256'],
+                    'user-agent': req.headers['user-agent'],
+                },
+                requestMethod: req.method,
+                requestUrl: req.url,
+                requestIp: req.ip,
             });
 
             // Respond quickly to Meta (they expect 200 within 20 seconds)
@@ -72,16 +79,25 @@ export class WhatsAppController {
 
             // Process webhook asynchronously
             if (body.object === 'whatsapp_business_account') {
+                logger.info(`📋 Processing ${body.entry?.length || 0} webhook entry/entries`);
+                
                 for (const entry of body.entry || []) {
                     logger.info('📋 Processing webhook entry', {
                         entryId: entry.id,
                         changesCount: entry.changes?.length || 0,
+                        fullEntry: JSON.stringify(entry, null, 2),
                     });
 
                     for (const change of entry.changes || []) {
                         logger.info('🔄 Processing webhook change', {
                             field: change.field,
-                            value: JSON.stringify(change.value, null, 2),
+                            changeId: change.id || 'N/A',
+                            valueKeys: change.value ? Object.keys(change.value) : [],
+                            hasMessages: !!(change.value?.messages && change.value.messages.length > 0),
+                            hasStatuses: !!(change.value?.statuses && change.value.statuses.length > 0),
+                            hasContacts: !!(change.value?.contacts && change.value.contacts.length > 0),
+                            hasMetadata: !!change.value?.metadata,
+                            fullChange: JSON.stringify(change, null, 2),
                         });
 
                         await this.whatsAppService.processWebhookChange(change);
@@ -90,13 +106,15 @@ export class WhatsAppController {
             } else {
                 logger.warn('⚠️ Unknown webhook object type', {
                     object: body.object,
-                    body: JSON.stringify(body, null, 2),
+                    fullBody: JSON.stringify(body, null, 2),
                 });
             }
 
             const processingTime = Date.now() - startTime;
             logger.info('✅ WhatsApp webhook processed successfully', {
                 processingTime: `${processingTime}ms`,
+                object: body.object,
+                entriesProcessed: body.entry?.length || 0,
             });
         } catch (error: any) {
             const processingTime = Date.now() - startTime;
@@ -104,7 +122,8 @@ export class WhatsAppController {
                 error: error.message,
                 stack: error.stack,
                 processingTime: `${processingTime}ms`,
-                body: JSON.stringify(req.body, null, 2),
+                fullBody: JSON.stringify(req.body, null, 2),
+                headers: JSON.stringify(req.headers),
             });
             // Still send 200 to Meta to avoid retries
             res.sendStatus(200);

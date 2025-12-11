@@ -1,6 +1,8 @@
 import nodemailer from 'nodemailer';
 import database from '../config/database';
 import { MessageLog } from '../entities/MessageLog';
+import { Invitation } from '../entities/Invitation';
+import { Event } from '../entities/Event';
 import { InvitationMethod, DeliveryStatus } from '../entities/enums';
 import { Repository } from 'typeorm';
 import config from '../config';
@@ -15,10 +17,14 @@ import logger from '../config/logger';
 export class CommunicationService {
   private emailTransporter!: nodemailer.Transporter;
   private messageLogRepository: Repository<MessageLog>;
+  private invitationRepository: Repository<Invitation>;
+  private eventRepository: Repository<Event>;
   private whatsAppService: WhatsAppService;
 
   constructor() {
     this.messageLogRepository = database.getRepository(MessageLog) as Repository<MessageLog>;
+    this.invitationRepository = database.getRepository(Invitation) as Repository<Invitation>;
+    this.eventRepository = database.getRepository(Event) as Repository<Event>;
     this.setupEmailTransporter();
     this.initializeSMSService();
     this.whatsAppService = new WhatsAppService();
@@ -29,12 +35,25 @@ export class CommunicationService {
    */
   private setupEmailTransporter(): void {
     try {
+      // Check if SMTP is configured
+      if (!config.smtp.host || !config.smtp.user || !config.smtp.pass) {
+        logger.warn('⚠️ Email transporter not configured - SMTP settings missing', {
+          hasHost: !!config.smtp.host,
+          hasUser: !!config.smtp.user,
+          hasPass: !!config.smtp.pass,
+          host: config.smtp.host || 'NOT SET',
+          port: config.smtp.port,
+        });
+        return;
+      }
+
       // Log configuration for debugging (without sensitive info)
-      logger.info('Setting up email transporter:', {
+      logger.info('📧 Setting up email transporter:', {
         host: config.smtp.host,
         port: config.smtp.port,
         user: config.smtp.user,
         hasPassword: !!config.smtp.pass,
+        secure: config.smtp.port === 465,
       });
 
       this.emailTransporter = nodemailer.createTransport({
@@ -48,34 +67,87 @@ export class CommunicationService {
         tls: {
           rejectUnauthorized: false, // Allow self-signed certificates
         },
-        connectionTimeout: 15000, // 15 seconds
-        greetingTimeout: 10000, // 10 seconds
-        socketTimeout: 30000, // 30 seconds
+        connectionTimeout: 30000, // Increased to 30 seconds
+        greetingTimeout: 15000, // Increased to 15 seconds
+        socketTimeout: 60000, // Increased to 60 seconds
         debug: config.nodeEnv === 'development', // Enable debug in dev
         logger: config.nodeEnv === 'development', // Enable logging in dev
       });
 
       // Verify connection (but don't block app startup)
+      // Use a timeout to prevent hanging
+      const verifyTimeout = setTimeout(() => {
+        logger.warn('⏱️ Email transporter verification timed out after 35 seconds', {
+          host: config.smtp.host,
+          port: config.smtp.port,
+          suggestion: 'Check SMTP server connectivity, firewall rules, or increase timeout',
+        });
+      }, 35000);
+
       this.emailTransporter.verify((error, success) => {
+        clearTimeout(verifyTimeout);
+
         if (error) {
-          logger.error('Email transporter verification failed:', {
+          const errorDetails: any = {
             message: error.message,
             code: (error as any).code,
             command: (error as any).command,
             response: (error as any).response,
+            responseCode: (error as any).responseCode,
+            host: config.smtp.host,
+            port: config.smtp.port,
+            user: config.smtp.user,
+            fullError: JSON.stringify(error, Object.getOwnPropertyNames(error)),
+          };
+
+          // Add specific error context
+          if (error.message?.includes('timeout') || error.message?.includes('ETIMEDOUT')) {
+            errorDetails.errorType = 'CONNECTION_TIMEOUT';
+            errorDetails.troubleshooting = [
+              'Check if SMTP server is reachable: try telnet or ping',
+              'Verify firewall rules allow outbound connections on port ' + config.smtp.port,
+              'Check if SMTP host and port are correct',
+              'Some networks block SMTP ports - try using port 587 with STARTTLS',
+            ];
+          } else if (error.message?.includes('ECONNREFUSED')) {
+            errorDetails.errorType = 'CONNECTION_REFUSED';
+            errorDetails.troubleshooting = [
+              'SMTP server is not accepting connections',
+              'Verify the host and port are correct',
+              'Check if SMTP service is running on the server',
+            ];
+          } else if (error.message?.includes('ENOTFOUND') || error.message?.includes('getaddrinfo')) {
+            errorDetails.errorType = 'DNS_RESOLUTION_FAILED';
+            errorDetails.troubleshooting = [
+              'Cannot resolve SMTP hostname',
+              'Check if host name is correct',
+              'Verify DNS settings',
+            ];
+          } else if ((error as any).code === 'EAUTH') {
+            errorDetails.errorType = 'AUTHENTICATION_FAILED';
+            errorDetails.troubleshooting = [
+              'SMTP credentials are incorrect',
+              'Verify username and password',
+              'For Gmail, use App Password instead of regular password',
+            ];
+          }
+
+          // logger.error('❌ Email transporter verification failed:', errorDetails);
+        } else {
+          logger.info('✅ Email transporter is ready and verified', {
             host: config.smtp.host,
             port: config.smtp.port,
             user: config.smtp.user,
           });
-        } else {
-          logger.info('✅ Email transporter is ready and verified');
         }
       });
     } catch (error) {
-      logger.error('Failed to setup email transporter:', {
+      logger.error('❌ Failed to setup email transporter:', {
         message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
         host: config.smtp.host,
         port: config.smtp.port,
+        user: config.smtp.user,
       });
     }
   }
@@ -184,7 +256,7 @@ export class CommunicationService {
 
     for (let i = 0; i < recipients.length; i++) {
       const recipient = recipients[i];
-      
+
       // Add delay between requests (except for the first one)
       if (i > 0) {
         await delay(100); // 100ms delay between requests
@@ -193,10 +265,10 @@ export class CommunicationService {
       try {
         // Use phone number as provided (no validation)
         const formattedPhone = recipient.trim();
-        
+
         if (!formattedPhone) {
           logger.warn(`Skipping empty phone number at index ${i}`);
-          
+
           // Create a message log entry for the failed attempt
           const messageLog = await this.messageLogRepository.save(
             this.messageLogRepository.create({
@@ -208,7 +280,7 @@ export class CommunicationService {
               errorMessage: 'Empty phone number',
             })
           );
-          
+
           results.push({
             id: messageLog.id,
             status: DeliveryStatus.FAILED,
@@ -254,7 +326,7 @@ export class CommunicationService {
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         const errorDetails = error instanceof Error ? error.stack : String(error);
-        
+
         // Enhanced error logging
         logger.error(`Failed to send SMS to ${recipient}:`, {
           error: errorMessage,
@@ -302,7 +374,7 @@ export class CommunicationService {
         // Check if message failed due to 24-hour window restriction
         if (response.requiresTemplate) {
           logger.warn(`⏰ Cannot send regular message to ${recipient.trim()} - 24-hour window expired. Template required.`);
-          
+
           // Log the failed attempt
           const messageLogData = {
             recipientType: 'phone',
@@ -529,6 +601,21 @@ export class CommunicationService {
     data: WhatsAppRequest
   ): Promise<{ success: boolean; error?: string; metadata?: any; requiresTemplate?: boolean }> {
     try {
+      // Log incoming request for debugging
+      logger.info(`📱 WhatsApp Send Request for ${phone}`, {
+        phone,
+        type: data.type,
+        useTemplate: data.useTemplate,
+        invitationId: data.invitationId,
+        eventId: data.eventId,
+        includeCardAttachment: data.includeCardAttachment,
+        hasMessage: !!data.message,
+        messageLength: data.message?.length || 0,
+        hasMediaUrl: !!data.mediaUrl,
+        hasTemplateVariables: !!data.templateVariables,
+        fullRequest: JSON.stringify(data, null, 2),
+      });
+
       // Check if WhatsApp service is configured (basic check)
       if (!config.whatsapp.token || !config.whatsapp.phoneId) {
         throw new Error('WhatsApp Business API credentials not configured');
@@ -540,13 +627,13 @@ export class CommunicationService {
         try {
           const conversationService = (await import('./conversationService')).default;
           requiresTemplate = await conversationService.requiresTemplateMessage(phone);
-          
+
           if (requiresTemplate) {
             logger.warn(`⏰ 24-hour window expired for ${phone}. Template message required.`, {
               phone,
               message: 'Regular text messages cannot be sent. Use an approved template instead.',
             });
-            
+
             return {
               success: false,
               error: 'MESSAGE_WINDOW_EXPIRED',
@@ -574,8 +661,293 @@ export class CommunicationService {
           'en_US', // Default language, could be added to WhatsAppRequest
           data.templateParams || []
         );
+      } else if (data.useTemplate && (data.invitationId || data.eventId)) {
+        // Use wedding invitation template (card attachment is optional)
+        logger.info(`📧 Processing template request for ${phone}`, {
+          phone,
+          useTemplate: data.useTemplate,
+          invitationId: data.invitationId,
+          eventId: data.eventId,
+          includeCardAttachment: data.includeCardAttachment,
+          hasMediaUrl: !!data.mediaUrl,
+          hasTemplateVariables: !!data.templateVariables,
+        });
+
+        try {
+          // Fetch invitation and event data
+          let invitation: Invitation | null = null;
+          let event: Event | null = null;
+
+          if (data.invitationId) {
+            invitation = await this.invitationRepository.findOne({
+              where: { id: data.invitationId },
+              relations: ['event', 'event.user']
+            });
+            if (invitation) {
+              event = invitation.event;
+            }
+          } else if (data.eventId) {
+            event = await this.eventRepository.findOne({
+              where: { id: data.eventId },
+              relations: ['user']
+            });
+          }
+
+          if (invitation && event) {
+            // Check if user wants to include card attachment
+            // If includeCardAttachment is explicitly false, don't use card even if it exists
+            const shouldIncludeCard = data.includeCardAttachment !== false; // Default to true if not specified
+
+            // Card attachment is optional - only use if:
+            // 1. User wants to include it (shouldIncludeCard is true)
+            // 2. URL is publicly accessible (not localhost)
+            // WhatsApp cannot access localhost URLs, so we filter them out
+            let cardUrl: string | undefined = undefined;
+
+            if (shouldIncludeCard) {
+              // Check mediaUrl first (from current request)
+              if (data.mediaUrl &&
+                !data.mediaUrl.includes('localhost') &&
+                !data.mediaUrl.includes('127.0.0.1') &&
+                !data.mediaUrl.includes('::1')) {
+                cardUrl = data.mediaUrl;
+              }
+              // Fallback to invitation cardUrl if no mediaUrl
+              else if (invitation.cardUrl &&
+                !invitation.cardUrl.includes('localhost') &&
+                !invitation.cardUrl.includes('127.0.0.1') &&
+                !invitation.cardUrl.includes('::1')) {
+                cardUrl = invitation.cardUrl;
+              }
+            }
+
+            const hasValidCardUrl = !!cardUrl;
+
+            // Build RSVP link if invitation has QR code
+            const rsvpLink = invitation.qrCode
+              ? `${process.env.FRONTEND_URL || 'http://localhost:3000'}/rsvp/${invitation.qrCode}`
+              : undefined;
+
+            // Use custom template variables if provided, otherwise use defaults
+            const customVars = data.templateVariables || {};
+
+            // Choose template based on whether we have a valid card URL
+            if (cardUrl) {
+              // Use wedding_invitation_with_image template when card is available
+              console.log('🔍 Template Selection Decision ==========================================>', {
+                phone,
+                templateName: 'wedding_invitation_with_image',
+                hasCardUrl: true,
+                cardUrl: cardUrl.substring(0, 50) + '...',
+                includeCardAttachment: data.includeCardAttachment,
+              });
+
+              logger.info(`📧 Using wedding_invitation_with_image template for ${phone}`, {
+                invitationId: invitation.id,
+                eventId: event.id,
+                guestName: invitation.guestName,
+                hasCard: true,
+                cardUrl: 'provided (public URL)',
+                includeCardAttachment: data.includeCardAttachment,
+                templateName: 'wedding_invitation_with_image'
+              });
+
+              response = await this.whatsAppService.sendWeddingInvitationWithImage(
+                phone,
+                {
+                  guestName: customVars.guestname || invitation.guestName,
+                  cardUrl: cardUrl
+                },
+                {
+                  eventDate: event.eventDate,
+                  startTime: customVars.starttime || event.startTime,
+                  endTime: customVars.endtime || event.endTime,
+                  venueName: event.venueName,
+                  venueAddress: event.venueAddress,
+                  user: event.user,
+                  brideName: customVars.bridename || (event as any).brideName,
+                  groomName: customVars.groomname || (event as any).groomName,
+                },
+                cardUrl,
+                rsvpLink,
+                'en', // Use 'en' to match working format
+                {
+                  hostname: customVars.hostname,
+                  eventdate: customVars.eventdate,
+                  venue: customVars.venue,
+                }
+              );
+
+              console.log('✅ wedding_invitation_with_image template response ==========================================>', {
+                phone,
+                success: !!response.messages,
+                messageId: response.messages?.[0]?.id,
+                messageStatus: response.messages?.[0]?.message_status
+              });
+            } else {
+              // Use wedding_invite template when no card is available
+              console.log('🔍 Template Selection Decision ==========================================>', {
+                phone,
+                templateName: 'wedding_invite',
+                hasCardUrl: false,
+                includeCardAttachment: data.includeCardAttachment,
+                mediaUrl: data.mediaUrl,
+                invitationCardUrl: invitation.cardUrl
+              });
+
+              logger.info(`📧 Using wedding_invite template (no image) for ${phone}`, {
+                invitationId: invitation.id,
+                eventId: event.id,
+                guestName: invitation.guestName,
+                hasCard: false,
+                includeCardAttachment: data.includeCardAttachment,
+                templateName: 'wedding_invite',
+                language: data.language || 'en',
+                reason: data.includeCardAttachment === false
+                  ? 'User disabled card attachment'
+                  : 'No valid card URL available'
+              });
+
+              // Check language and use appropriate template
+              const selectedLanguage = data.language || 'en';
+
+              if (selectedLanguage === 'sw') {
+                // Use Swahili template
+                response = await this.whatsAppService.sendSwahiliWeddingInvitation(
+                  phone,
+                  {
+                    guestName: customVars.guestname || invitation.guestName,
+                    cardUrl: undefined
+                  },
+                  {
+                    eventDate: event.eventDate,
+                    startTime: customVars.starttime || event.startTime,
+                    endTime: customVars.endtime || event.endTime,
+                    venueName: event.venueName,
+                    venueAddress: event.venueAddress,
+                    user: event.user,
+                    brideName: customVars.bridename || (event as any).brideName,
+                    groomName: customVars.groomname || (event as any).groomName,
+                  },
+                  '', // No card image URL
+                  rsvpLink,
+                  'sw' // Swahili language code
+                );
+              } else {
+                // Use English template
+                response = await this.whatsAppService.sendWeddingInvite(
+                  phone,
+                  {
+                    guestName: customVars.guestname || invitation.guestName,
+                  },
+                  {
+                    eventDate: event.eventDate,
+                    startTime: customVars.starttime || event.startTime,
+                    endTime: customVars.endtime || event.endTime,
+                    venueName: event.venueName,
+                    venueAddress: event.venueAddress,
+                    user: event.user,
+                    brideName: customVars.bridename || (event as any).brideName,
+                    groomName: customVars.groomname || (event as any).groomName,
+                  },
+                  rsvpLink,
+                  selectedLanguage,
+                  {
+                    guestname: customVars.guestname,
+                    hostname: customVars.hostname,
+                    bridename: customVars.bridename,
+                    groomname: customVars.groomname,
+                    eventdate: customVars.eventdate,
+                    venue: customVars.venue,
+                    starttime: customVars.starttime,
+                    endtime: customVars.endtime,
+                  }
+                );
+              }
+
+              console.log(`✅ wedding_invite template response (${selectedLanguage}) ==========================================>`, {
+                phone,
+                success: !!response.messages,
+                messageId: response.messages?.[0]?.id,
+                messageStatus: response.messages?.[0]?.message_status
+              });
+            }
+          } else {
+            // If useTemplate is true but data not found, return error instead of falling back
+            if (data.useTemplate) {
+              logger.error(`❌ Cannot use template for ${phone}: invitation/event data not found`, {
+                phone,
+                invitationId: data.invitationId,
+                eventId: data.eventId,
+                useTemplate: data.useTemplate,
+              });
+              throw new Error('Invitation or event data not found. Cannot send template message.');
+            }
+
+            // Fallback to regular message only if NOT using template
+            logger.warn(`⚠️ Could not find invitation/event data for ${phone}, falling back to regular message`);
+            if (data.mediaUrl && !data.mediaUrl.includes('localhost')) {
+              // Try image message if mediaUrl exists and is not localhost
+              let mediaIdOrUrl = data.mediaUrl;
+              if (data.mediaUrl.startsWith('data:')) {
+                logger.info(`Uploading media for ${phone}...`);
+                mediaIdOrUrl = await this.whatsAppService.uploadMedia(data.mediaUrl);
+              }
+              response = await this.whatsAppService.sendImageMessage(
+                phone,
+                mediaIdOrUrl,
+                data.message || ''
+              );
+            } else if (data.message && data.message.trim()) {
+              // Only send text message if message is not empty
+              response = await this.whatsAppService.sendTextMessage(
+                phone,
+                data.message
+              );
+            } else {
+              throw new Error('Cannot send message: no template data found and message body is empty');
+            }
+          }
+        } catch (templateError: any) {
+          logger.error(`❌ Error using template for ${phone}:`, {
+            error: templateError.message,
+            stack: templateError.stack,
+            phone,
+            useTemplate: data.useTemplate,
+            invitationId: data.invitationId,
+            eventId: data.eventId,
+            fullError: JSON.stringify(templateError, Object.getOwnPropertyNames(templateError)),
+          });
+
+          // If useTemplate is true, don't fall back to text message - return error
+          if (data.useTemplate) {
+            throw new Error(`Template message failed: ${templateError.message}`);
+          }
+
+          // Fallback to regular message only if NOT using template
+          if (data.mediaUrl && !data.mediaUrl.includes('localhost')) {
+            // Try image message if mediaUrl exists and is not localhost
+            let mediaIdOrUrl = data.mediaUrl;
+            if (data.mediaUrl.startsWith('data:')) {
+              mediaIdOrUrl = await this.whatsAppService.uploadMedia(data.mediaUrl);
+            }
+            response = await this.whatsAppService.sendImageMessage(
+              phone,
+              mediaIdOrUrl,
+              data.message || ''
+            );
+          } else if (data.message && data.message.trim()) {
+            // Only send text message if message is not empty
+            response = await this.whatsAppService.sendTextMessage(
+              phone,
+              data.message
+            );
+          } else {
+            throw new Error('Cannot send message: template failed and message body is empty');
+          }
+        }
       } else if (data.mediaUrl) {
-        // Send media message
+        // Send media message (regular, no template)
         let mediaIdOrUrl = data.mediaUrl;
 
         // If Data URL, upload first
@@ -590,7 +962,10 @@ export class CommunicationService {
           data.message // Use message as caption
         );
       } else {
-        // Send text message (default)
+        // Send text message (default) - but only if message is not empty
+        if (!data.message || !data.message.trim()) {
+          throw new Error('Cannot send WhatsApp message: message body is required when not using template');
+        }
         response = await this.whatsAppService.sendTextMessage(
           phone,
           data.message

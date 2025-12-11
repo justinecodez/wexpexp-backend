@@ -13,6 +13,7 @@ export const generalLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  validate: false, // Disable trust proxy validation to prevent warnings
   skip: (req: Request) => {
     // Skip rate limiting for chat routes (they have their own limiter)
     return req.path.startsWith('/api/conversations');

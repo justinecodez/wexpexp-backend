@@ -58,7 +58,7 @@ const getBaseTemplate = (title: string, content: string): string => {
                                     If you have any questions, please contact our support team.
                                 </p>
                                 <p style="margin: 10px 0 0 0; font-size: 10px; color: #95a5a6;">
-                                    © ${new Date().getFullYear()} WEXP. All rights reserved.
+                                    © ${new Date().getFullYear()} Wexp Events
                                 </p>
                             </td>
                         </tr>

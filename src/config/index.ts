@@ -57,6 +57,7 @@ interface Config {
     token: string;
     phoneId: string;
     verifyToken: string;
+    flowId?: string;
   };
 
   // Payment Gateways (Tanzania)
@@ -173,6 +174,7 @@ const config: Config = {
     token: process.env.WHATSAPP_ACCESS_TOKEN || '',
     phoneId: process.env.WHATSAPP_PHONE_NUMBER_ID || '',
     verifyToken: process.env.WHATSAPP_VERIFY_TOKEN || '',
+    flowId: process.env.WHATSAPP_FLOW_ID || '',
   },
 
   // Payments

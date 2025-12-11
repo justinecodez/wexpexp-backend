@@ -274,6 +274,21 @@ export interface WhatsAppRequest {
   templateName?: string;
   templateParams?: any;
   mediaUrl?: string;
+  invitationId?: string;
+  eventId?: string;
+  useTemplate?: boolean; // Flag to use wedding invitation template
+  includeCardAttachment?: boolean; // Flag to include card attachment (if false, use wedding_invite template)
+  language?: 'en' | 'sw'; // Template language: English or Swahili
+  templateVariables?: {
+    guestname?: string;
+    hostname?: string;
+    bridename?: string;
+    groomname?: string;
+    eventdate?: string;
+    venue?: string;
+    starttime?: string;
+    endtime?: string;
+  }; // Custom template variable overrides
 }
 
 export interface MessageResponse {

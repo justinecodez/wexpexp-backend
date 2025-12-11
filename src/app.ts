@@ -51,6 +51,11 @@ class App {
 
   constructor() {
     this.app = express();
+
+    // Enable trust proxy to handle X-Forwarded-For header correctly
+    // Required for rate limiting and accurate IP detection behind reverse proxies
+    this.app.set('trust proxy', true);
+
     this.server = createServer(this.app);
     this.io = new SocketIOServer(this.server, {
       cors: {
@@ -237,7 +242,7 @@ class App {
     this.app.use('/api/whatsapp', whatsappRoutes);
     this.app.use('/api/conversations', conversationRoutes);
     this.app.use('/webhooks', webhookRoutes); // WhatsApp webhook (no /api prefix)
-    
+
     // Card generation routes
     const cardGenerationRoutes = require('./routes/cardGenerationRoutes').default;
     this.app.use('/api/card-generation', cardGenerationRoutes);
