@@ -23,5 +23,12 @@ router.post('/send', conversationController.sendMessage);
 // Mark conversation as read
 router.post('/:id/read', conversationController.markAsRead);
 
+// Resend invitation to contact
+router.post('/:id/resend-invitation', conversationController.resendInvitation);
+
+// Update all conversation names from invitation system
+router.post('/update-names', conversationController.updateConversationNames);
+
+
 export default router;
 

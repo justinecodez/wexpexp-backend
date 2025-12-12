@@ -22,7 +22,7 @@ export enum EventType {
 }
 
 export enum EventStatus {
-  DRAFT = 'DRAFT',
+  UPCOMING = 'UPCOMING',
   ACTIVE = 'ACTIVE',
   COMPLETED = 'COMPLETED',
   CANCELLED = 'CANCELLED',

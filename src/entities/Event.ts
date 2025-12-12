@@ -43,6 +43,15 @@ export class Event {
   @Column({ name: 'end_time', nullable: true })
   endTime!: string;
 
+  @Column({ name: 'host_name', nullable: true })
+  hostname?: string;
+
+  @Column({ name: 'bride_name', nullable: true })
+  brideName?: string;
+
+  @Column({ name: 'groom_name', nullable: true })
+  groomName?: string;
+
   @Column({ default: 'Africa/Dar_es_Salaam' })
   timezone!: string;
 
@@ -52,13 +61,8 @@ export class Event {
   @Column({ name: 'venue_address', nullable: true })
   venueAddress!: string;
 
-  @Column({
-    type: 'varchar',
-    enum: TanzaniaCity,
-    name: 'venue_city',
-    nullable: true,
-  })
-  venueCity!: TanzaniaCity;
+  @Column({ name: 'venue_city', nullable: true })
+  venueCity?: string;
 
   @Column({ name: 'max_guests' })
   maxGuests!: number;
@@ -75,7 +79,7 @@ export class Event {
   @Column({
     type: 'varchar',
     enum: EventStatus,
-    default: EventStatus.DRAFT,
+    default: EventStatus.UPCOMING,
   })
   status!: EventStatus;
 

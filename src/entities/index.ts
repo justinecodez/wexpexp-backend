@@ -15,10 +15,10 @@ export { InsurancePolicy } from './InsurancePolicy';
 export { Budget } from './Budget';
 export { LandingPageContent } from './LandingPageContent';
 export { Notification } from './Notification';
-export { MessageLog } from './MessageLog';
 export { EventAnalytics } from './EventAnalytics';
 export { Conversation } from './Conversation';
 export { Message, MessageDirection, MessageStatus } from './Message';
+export { MessageLog } from './MessageLog';
 export { ECardTemplate } from './ECardTemplate';
 
 // Export enums separately
@@ -41,11 +41,11 @@ import { InsurancePolicy } from './InsurancePolicy';
 import { Budget } from './Budget';
 import { LandingPageContent } from './LandingPageContent';
 import { Notification } from './Notification';
-import { MessageLog } from './MessageLog';
 import { EventAnalytics } from './EventAnalytics';
 import { ECardTemplate } from './ECardTemplate';
 import { Conversation } from './Conversation';
 import { Message } from './Message';
+import { MessageLog } from './MessageLog';
 
 export const entityClasses = [
   User,
@@ -64,9 +64,9 @@ export const entityClasses = [
   Budget,
   LandingPageContent,
   Notification,
-  MessageLog,
   EventAnalytics,
   ECardTemplate,
   Conversation,
   Message,
+  MessageLog,
 ];

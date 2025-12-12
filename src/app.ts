@@ -42,6 +42,7 @@ import conversationRoutes from './routes/conversations';
 // Import Socket.IO service
 import SocketService from './services/socketService';
 import communicationService from './services/communicationService';
+import socketEmitter from './utils/socketEmitter';
 
 class App {
   public app: express.Application;
@@ -268,6 +269,9 @@ class App {
   private initializeSocketIO(): void {
     // Initialize the socket service
     this.socketService = new SocketService(this.io);
+
+    // Initialize global socket emitter for services
+    socketEmitter.setIO(this.io);
 
     // Make io and socketService available to other parts of the application
     this.app.set('io', this.io);

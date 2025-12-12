@@ -1,8 +1,8 @@
 import nodemailer from 'nodemailer';
 import database from '../config/database';
-import { MessageLog } from '../entities/MessageLog';
 import { Invitation } from '../entities/Invitation';
 import { Event } from '../entities/Event';
+import { MessageLog } from '../entities/MessageLog';
 import { InvitationMethod, DeliveryStatus } from '../entities/enums';
 import { Repository } from 'typeorm';
 import config from '../config';
@@ -16,15 +16,15 @@ import logger from '../config/logger';
 
 export class CommunicationService {
   private emailTransporter!: nodemailer.Transporter;
-  private messageLogRepository: Repository<MessageLog>;
   private invitationRepository: Repository<Invitation>;
   private eventRepository: Repository<Event>;
+  private messageLogRepository: Repository<MessageLog>;
   private whatsAppService: WhatsAppService;
 
   constructor() {
-    this.messageLogRepository = database.getRepository(MessageLog) as Repository<MessageLog>;
     this.invitationRepository = database.getRepository(Invitation) as Repository<Invitation>;
     this.eventRepository = database.getRepository(Event) as Repository<Event>;
+    this.messageLogRepository = database.getRepository(MessageLog) as Repository<MessageLog>;
     this.setupEmailTransporter();
     this.initializeSMSService();
     this.whatsAppService = new WhatsAppService();

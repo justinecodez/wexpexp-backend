@@ -499,14 +499,10 @@ export class InvitationService {
       throw new AppError('Guest has already checked in', 400, 'ALREADY_CHECKED_IN');
     }
 
-    // Check if event is today or in the past
-    const eventDate = new Date(invitation.event.eventDate);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
 
-    if (eventDate > today) {
-      throw new AppError('Check-in is not available yet', 400, 'EARLY_CHECK_IN');
-    }
+    // Manual check-in is allowed at any time (no date restriction)
+    // This allows event organizers to check in guests regardless of event date
+
 
     // Update check-in time
     invitation.checkInTime = new Date();
@@ -854,8 +850,8 @@ export class InvitationService {
    * Update invitation card URL and personalized message (called by worker)
    */
   async updateInvitationCardUrl(
-    invitationId: string, 
-    cardUrl: string, 
+    invitationId: string,
+    cardUrl: string,
     personalizedMessage?: string
   ): Promise<any> {
     const invitation = await this.invitationRepository.findOne({
@@ -868,12 +864,12 @@ export class InvitationService {
 
     // Update card URL
     invitation.cardUrl = cardUrl;
-    
+
     // Update personalized message if provided
     if (personalizedMessage !== undefined) {
       invitation.personalizedMessage = personalizedMessage;
     }
-    
+
     await this.invitationRepository.save(invitation);
 
     logger.info(`Card URL and personalized message updated for invitation: ${invitationId}`);

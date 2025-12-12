@@ -195,7 +195,8 @@ export class WhatsAppService {
                     text.includes('sitashashiriki') ||
                     payload.includes('not attend') ||
                     payload.includes('sitashashiriki')) {
-                    await this.handleAttendanceDecline(message.from, contactName);
+                    const language = (text.includes('sitashashiriki') || payload.includes('sitashashiriki')) ? 'sw' : 'en';
+                    await this.handleAttendanceDecline(message.from, contactName, language);
                 }
                 // Check if this is a confirmation button
                 // English: "I will attend" OR Swahili: "Nitashashiriki"
@@ -204,16 +205,17 @@ export class WhatsAppService {
                     payload.includes('will attend') ||
                     payload.includes('nitashashiriki') ||
                     payload === 'confirm your attandance') {
-                    await this.handleAttendanceConfirmation(message.from, contactName);
+                    const language = (text.includes('nitashashiriki') || payload.includes('nitashashiriki')) ? 'sw' : 'en';
+                    await this.handleAttendanceConfirmation(message.from, contactName, language);
                 }
 
-                // Store button message
-                const content = `[button: ${message.button.text}]`;
+                // Store button message with just the button text (clean display)
+                const content = message.button.text; // Just the button text, no brackets
                 const storedMessage = await conversationService.storeIncomingMessage(
                     message.from,
                     message.id,
                     content,
-                    message.type,
+                    'button_reply', // Special type for button replies
                     {
                         timestamp: message.timestamp,
                         from: message.from,
@@ -284,11 +286,12 @@ export class WhatsAppService {
     /**
      * Handle attendance confirmation from button click
      */
-    private async handleAttendanceConfirmation(phone: string, contactName?: string): Promise<void> {
+    private async handleAttendanceConfirmation(phone: string, contactName?: string, language: 'en' | 'sw' = 'en'): Promise<void> {
         try {
             logger.info('🎉 Attendance confirmation button clicked', {
                 phone,
-                contactName
+                contactName,
+                language
             });
 
             // Find invitation by phone number
@@ -300,10 +303,10 @@ export class WhatsAppService {
 
             if (!invitation) {
                 logger.warn('⚠️ No invitation found for phone number', { phone });
-                await this.sendTextMessage(
-                    phone,
-                    "We couldn't find your invitation. Please contact the event organizer for assistance."
-                );
+                const msg = language === 'sw'
+                    ? "Hatukuweza kupata mwaliko wako. Tafadhali wasiliana na mwandaaji wa hafla kwa msaada."
+                    : "We couldn't find your invitation. Please contact the event organizer for assistance.";
+                await this.sendTextMessage(phone, msg);
                 return;
             }
 
@@ -313,24 +316,20 @@ export class WhatsAppService {
                     invitationId: invitation.id,
                     guestName: invitation.guestName
                 });
-                await this.sendTextMessage(
-                    phone,
-                    `Thank you ${invitation.guestName}! Your attendance was already confirmed for ${invitation.event.title}. We look forward to seeing you!`
-                );
+                const msg = language === 'sw'
+                    ? `Asante ${invitation.guestName}! Tulishapokea uthibitisho wako kwa ajili ya ${invitation.event.title}. Tunatazamia kukuona!`
+                    : `Thank you ${invitation.guestName}! Your attendance was already confirmed for ${invitation.event.title}. We look forward to seeing you!`;
+                await this.sendTextMessage(phone, msg);
                 return;
             }
 
-            // Check if user already declined - prevent changing RSVP
+            // Check if user previously declined - Now ALLOW changing RSVP
             if (invitation.rsvpStatus === RSVPStatus.DECLINED) {
-                logger.info('⚠️ User trying to confirm after declining', {
+                logger.info('🔄 User changing RSVP from Declined to Accepted', {
                     invitationId: invitation.id,
                     guestName: invitation.guestName
                 });
-                await this.sendTextMessage(
-                    phone,
-                    `${invitation.guestName}, we noted that you previously declined. Your first response has been recorded. If you need to change your RSVP, please contact the event organizer.`
-                );
-                return;
+                // We allow the update
             }
 
             // Update RSVP status
@@ -346,10 +345,23 @@ export class WhatsAppService {
             });
 
             // Send confirmation message
-            await this.sendTextMessage(
-                phone,
-                `Thank you ${invitation.guestName}! Your attendance has been confirmed for ${invitation.event.title}. We look forward to seeing you! 🎉`
-            );
+            const msg = language === 'sw'
+                ? `Asante ${invitation.guestName}! Uthibitisho wako umepokelewa kwa ajili ya ${invitation.event.title}. Tunatazamia kukuona! 🎉`
+                : `Thank you ${invitation.guestName}! Your attendance has been confirmed for ${invitation.event.title}. We look forward to seeing you! 🎉`;
+
+            const response = await this.sendTextMessage(phone, msg);
+
+            // Store the automated response in conversation
+            if (response && response.messages && response.messages[0]) {
+                await conversationService.storeOutgoingMessage(
+                    phone,
+                    response.messages[0].id,
+                    msg,
+                    'text',
+                    undefined,
+                    contactName
+                );
+            }
 
         } catch (error) {
             logger.error('❌ Error handling attendance confirmation:', {
@@ -357,21 +369,22 @@ export class WhatsAppService {
                 stack: error instanceof Error ? error.stack : undefined,
                 phone
             });
-            await this.sendTextMessage(
-                phone,
-                "Sorry, there was an error processing your confirmation. Please try again or contact the event organizer."
-            );
+            const msg = language === 'sw'
+                ? "Pole, kulikuwa na hitilafu wakati wa kushughulikia ombi lako. Tafadhali jaribu tena."
+                : "Sorry, there was an error processing your confirmation. Please try again or contact the event organizer.";
+            await this.sendTextMessage(phone, msg);
         }
     }
 
     /**
      * Handle attendance decline from button click
      */
-    private async handleAttendanceDecline(phone: string, contactName?: string): Promise<void> {
+    private async handleAttendanceDecline(phone: string, contactName?: string, language: 'en' | 'sw' = 'en'): Promise<void> {
         try {
             logger.info('❌ Attendance decline button clicked', {
                 phone,
-                contactName
+                contactName,
+                language
             });
 
             // Find invitation by phone number
@@ -383,10 +396,10 @@ export class WhatsAppService {
 
             if (!invitation) {
                 logger.warn('⚠️ No invitation found for phone number', { phone });
-                await this.sendTextMessage(
-                    phone,
-                    "We couldn't find your invitation. Please contact the event organizer for assistance."
-                );
+                const msg = language === 'sw'
+                    ? "Hatukuweza kupata mwaliko wako. Tafadhali wasiliana na mwandaaji wa hafla kwa msaada."
+                    : "We couldn't find your invitation. Please contact the event organizer for assistance.";
+                await this.sendTextMessage(phone, msg);
                 return;
             }
 
@@ -396,24 +409,20 @@ export class WhatsAppService {
                     invitationId: invitation.id,
                     guestName: invitation.guestName
                 });
-                await this.sendTextMessage(
-                    phone,
-                    `Thank you ${invitation.guestName}. We already have your response that you won't be able to attend ${invitation.event.title}. We hope to see you at future events!`
-                );
+                const msg = language === 'sw'
+                    ? `Asante ${invitation.guestName}. Tayari tumepokea taarifa kuwa hutaweza kuhudhuria ${invitation.event.title}. Tunatumai kukuona katika hafla zijazo!`
+                    : `Thank you ${invitation.guestName}. We already have your response that you won't be able to attend ${invitation.event.title}. We hope to see you at future events!`;
+                await this.sendTextMessage(phone, msg);
                 return;
             }
 
-            // Check if user already confirmed - prevent changing RSVP
+            // Check if user previously confirmed - Now ALLOW changing RSVP
             if (invitation.rsvpStatus === RSVPStatus.ACCEPTED) {
-                logger.info('⚠️ User trying to decline after confirming', {
+                logger.info('🔄 User changing RSVP from Accepted to Declined', {
                     invitationId: invitation.id,
                     guestName: invitation.guestName
                 });
-                await this.sendTextMessage(
-                    phone,
-                    `${invitation.guestName}, we noted that you previously confirmed attendance. Your first response has been recorded. If you need to change your RSVP, please contact the event organizer.`
-                );
-                return;
+                // We allow the update
             }
 
             // Update RSVP status to declined
@@ -429,10 +438,24 @@ export class WhatsAppService {
             });
 
             // Send acknowledgment message
-            await this.sendTextMessage(
-                phone,
-                `Thank you for letting us know, ${invitation.guestName}. We're sorry you won't be able to attend ${invitation.event.title}. We hope to see you at future events!`
-            );
+            const msg = language === 'sw'
+                ? `Asante kwa taarifa, ${invitation.guestName}. Tunasikitika kuwa hutaweza kuhudhuria ${invitation.event.title}. Tunatumai kukuona katika hafla zijazo!`
+                : `Thank you for letting us know, ${invitation.guestName}. We're sorry you won't be able to attend ${invitation.event.title}. We hope to see you at future events!`;
+
+            const response = await this.sendTextMessage(phone, msg);
+
+            // Store the automated response in conversation
+            if (response && response.messages && response.messages[0]) {
+                await conversationService.storeOutgoingMessage(
+                    phone,
+                    response.messages[0].id,
+                    msg,
+                    'text',
+                    undefined,
+                    contactName
+                );
+            }
+
 
         } catch (error) {
             logger.error('❌ Error handling attendance decline:', {
@@ -440,10 +463,10 @@ export class WhatsAppService {
                 stack: error instanceof Error ? error.stack : undefined,
                 phone
             });
-            await this.sendTextMessage(
-                phone,
-                "Sorry, there was an error processing your response. Please try again or contact the event organizer."
-            );
+            const msg = language === 'sw'
+                ? "Pole, kulikuwa na hitilafu wakati wa kushughulikia ombi lako. Tafadhali jaribu tena."
+                : "Sorry, there was an error processing your response. Please try again or contact the event organizer.";
+            await this.sendTextMessage(phone, msg);
         }
     }
 
@@ -624,15 +647,28 @@ export class WhatsAppService {
             // Update message status in database
             const timestamp = status.timestamp ? new Date(parseInt(status.timestamp) * 1000) : new Date();
 
+            // Extract error message if status is failed
+            let errorDetails: string | undefined;
+            if (status.status === 'failed' && status.errors && status.errors.length > 0) {
+                const error = status.errors[0];
+                errorDetails = error.error_data?.details || error.message || `Error ${error.code}: ${error.title}`;
+            }
+
             logger.info(`🔍 Attempting to update message status in database`, {
                 whatsappMessageId: status.id,
                 targetStatus: messageStatus,
                 timestamp: timestamp.toISOString(),
                 recipient: status.recipient_id,
+                errorDetails,
                 statusObject: JSON.stringify(status, null, 2),
             });
 
-            const updated = await conversationService.updateMessageStatus(status.id, messageStatus, timestamp);
+            const updated = await conversationService.updateMessageStatus(
+                status.id,
+                messageStatus,
+                timestamp,
+                errorDetails
+            );
 
             if (!updated) {
                 logger.warn(`⚠️ Could not update message status for ${status.id}`, {

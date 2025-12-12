@@ -93,6 +93,9 @@ export interface CreateEventRequest {
   eventDate: string;
   startTime: string;
   endTime?: string;
+  hostname?: string;
+  brideName?: string;
+  groomName?: string;
   venueName?: string;
   venueAddress?: string;
   venueCity?: string;
@@ -107,9 +110,12 @@ export interface EventResponse {
   title: string;
   description?: string;
   eventType: string;
-  eventDate: Date;
+  eventDate: string | Date;
   startTime: string;
   endTime?: string;
+  hostname?: string;
+  brideName?: string;
+  groomName?: string;
   venueName?: string;
   venueAddress?: string;
   venueCity?: string;
@@ -119,8 +125,8 @@ export interface EventResponse {
   currency: string;
   status: string;
   isPublic: boolean;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt: string | Date;
+  updatedAt: string | Date;
   organizer?: {
     name: string;
     email?: string;
@@ -398,7 +404,7 @@ export enum TanzaniaCity {
 }
 
 export enum EventStatus {
-  DRAFT = 'DRAFT',
+  UPCOMING = 'UPCOMING',
   ACTIVE = 'ACTIVE',
   COMPLETED = 'COMPLETED',
   CANCELLED = 'CANCELLED',

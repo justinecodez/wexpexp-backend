@@ -36,6 +36,9 @@ export class EventService {
       eventDate,
       startTime,
       endTime,
+      hostname,
+      brideName,
+      groomName,
       venueName,
       venueAddress,
       venueCity,
@@ -63,6 +66,9 @@ export class EventService {
       eventDate: eventDateTime,
       startTime,
       endTime,
+      hostname,
+      brideName,
+      groomName,
       venueName,
       venueAddress,
       venueCity: venueCity as any,
@@ -324,6 +330,15 @@ export class EventService {
     userId: string,
     updateData: Partial<CreateEventRequest>
   ): Promise<EventResponse> {
+    // Debug: Log what's being received
+    console.log('=== UPDATE EVENT DEBUG ===');
+    console.log('eventId:', eventId);
+    console.log('hostname:', updateData.hostname);
+    console.log('brideName:', updateData.brideName);
+    console.log('groomName:', updateData.groomName);
+    console.log('Full updateData:', JSON.stringify(updateData, null, 2));
+    console.log('=== END DEBUG ===');
+
     // Check if event exists and belongs to user
     const existingEvent = await this.eventRepository.findOne({
       where: { id: eventId },
@@ -554,6 +569,9 @@ export class EventService {
       eventDate: event.eventDate,
       startTime: event.startTime,
       endTime: event.endTime,
+      hostname: event.hostname,
+      brideName: event.brideName,
+      groomName: event.groomName,
       venueName: event.venueName,
       venueAddress: event.venueAddress,
       venueCity: event.venueCity,

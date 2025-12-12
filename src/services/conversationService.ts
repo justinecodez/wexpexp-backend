@@ -6,6 +6,7 @@ import { Conversation } from '../entities/Conversation';
 import { Message, MessageDirection, MessageStatus } from '../entities/Message';
 import { Invitation } from '../entities/Invitation';
 import { Event } from '../entities/Event';
+import socketEmitter from '../utils/socketEmitter';
 
 export class ConversationService {
   private conversationRepository: Repository<Conversation>;
@@ -58,6 +59,28 @@ export class ConversationService {
     // Normalize phone number (remove + and spaces)
     const normalizedPhone = phoneNumber.replace(/[\s+]/g, '');
 
+    // ALWAYS look up guest name from invitation system first
+    let officialGuestName: string | null = null;
+    try {
+      const invitation = await this.invitationRepository.findOne({
+        where: { guestPhone: normalizedPhone },
+        order: { createdAt: 'DESC' }, // Get most recent invitation
+        select: ['guestName'],
+      });
+
+      if (invitation && invitation.guestName) {
+        officialGuestName = invitation.guestName;
+        logger.info(`✅ Found official guest name from invitation: "${officialGuestName}" for ${normalizedPhone}`);
+      } else {
+        logger.debug(`No invitation found for ${normalizedPhone}, will use WhatsApp name or phone number`);
+      }
+    } catch (error) {
+      logger.warn(`Error looking up guest name for ${normalizedPhone}:`, error);
+    }
+
+    // Prioritize: Official guest name > WhatsApp contact name > Phone number
+    const finalContactName = officialGuestName || contactName || normalizedPhone;
+
     let conversation = await this.conversationRepository.findOne({
       where: {
         userId,
@@ -70,37 +93,47 @@ export class ConversationService {
       conversation = this.conversationRepository.create({
         userId,
         phoneNumber: normalizedPhone,
-        contactName: contactName || normalizedPhone,
+        contactName: finalContactName,
         unreadCount: 0,
       });
       conversation = await this.conversationRepository.save(conversation);
-      logger.info(`Created new conversation for ${phoneNumber} (${contactName || 'Unknown'}) with ID: ${conversation.id}`);
+      logger.info(`Created new conversation for ${phoneNumber} with name: "${finalContactName}" (ID: ${conversation.id})`);
     } else {
-      // Update contact name if provided and different
-      // Also update if current name is just the phone number or empty
-      const currentName = conversation.contactName || '';
-      const shouldUpdate = contactName &&
+      // ALWAYS update to official guest name if we have it
+      // This ensures nicknames are replaced with official names
+      const shouldUpdateToOfficialName = officialGuestName &&
+        conversation.contactName !== officialGuestName;
+
+      // Also update if we only have WhatsApp name and it's better than current
+      const shouldUpdateToWhatsAppName = !officialGuestName &&
+        contactName &&
         contactName.trim() !== '' &&
         contactName !== normalizedPhone &&
-        (currentName === normalizedPhone ||
-          currentName === '' ||
-          currentName !== contactName);
+        (conversation.contactName === normalizedPhone ||
+          conversation.contactName === '' ||
+          conversation.contactName !== contactName);
 
-      if (shouldUpdate) {
+      if (shouldUpdateToOfficialName) {
         const oldName = conversation.contactName || normalizedPhone;
-        // Use update() to avoid relation cascade issues
+        await this.conversationRepository.update(
+          { id: conversation.id },
+          { contactName: officialGuestName! } // Non-null assertion safe here
+        );
+        conversation.contactName = officialGuestName!; // Non-null assertion safe here
+        logger.info(`✅ Updated to OFFICIAL guest name for ${phoneNumber}: "${oldName}" -> "${officialGuestName}"`);
+      } else if (shouldUpdateToWhatsAppName) {
+        const oldName = conversation.contactName || normalizedPhone;
         await this.conversationRepository.update(
           { id: conversation.id },
           { contactName: contactName }
         );
-        conversation.contactName = contactName; // Update local object too
+        conversation.contactName = contactName;
         logger.info(`✅ Updated contact name for ${phoneNumber}: "${oldName}" -> "${contactName}"`);
-      } else if (contactName) {
-        logger.debug(`Skipped contact name update for ${phoneNumber}:`, {
-          provided: contactName,
+      } else {
+        logger.debug(`No name update needed for ${phoneNumber}:`, {
           current: conversation.contactName,
-          phone: normalizedPhone,
-          shouldUpdate,
+          official: officialGuestName,
+          whatsapp: contactName,
         });
       }
     }
@@ -210,6 +243,16 @@ export class ConversationService {
 
       logger.info(`Stored incoming message from ${phoneNumber}, message ID: ${savedMessage.id}`);
 
+      // Emit real-time new message event
+      socketEmitter.emitNewMessage({
+        messageId: savedMessage.id,
+        conversationId: savedMessage.conversationId,
+        phoneNumber: phoneNumber,
+        content: content,
+        direction: MessageDirection.INBOUND,
+        timestamp: savedMessage.createdAt.toISOString(),
+      });
+
       return savedMessage;
     } catch (error: any) {
       logger.error('Error storing incoming message:', {
@@ -303,6 +346,16 @@ export class ConversationService {
       );
 
       logger.info(`Stored outgoing message to ${phoneNumber}, message ID: ${savedMessage.id}`);
+
+      // Emit real-time new message event
+      socketEmitter.emitNewMessage({
+        messageId: savedMessage.id,
+        conversationId: savedMessage.conversationId,
+        phoneNumber: phoneNumber,
+        content: content,
+        direction: MessageDirection.OUTBOUND,
+        timestamp: new Date().toISOString(),
+      });
 
       return savedMessage;
     } catch (error: any) {
@@ -400,13 +453,15 @@ export class ConversationService {
   async updateMessageStatus(
     whatsappMessageId: string,
     status: MessageStatus,
-    timestamp?: Date
+    timestamp?: Date,
+    errorMessage?: string
   ): Promise<Message | null> {
     try {
       logger.info(`🔍 Looking up message with WhatsApp ID: ${whatsappMessageId}`, {
         whatsappMessageId,
         targetStatus: status,
         timestamp: timestamp?.toISOString(),
+        errorMessage,
       });
 
       const message = await this.messageRepository.findOne({
@@ -414,18 +469,19 @@ export class ConversationService {
       });
 
       if (!message) {
-        // Try to find by partial match (in case of encoding issues)
+        logger.warn(`⚠️ Message not found with exact WhatsApp ID: ${whatsappMessageId}. Searching all outbound messages...`);
+
         const allMessages = await this.messageRepository.find({
           where: { direction: MessageDirection.OUTBOUND },
           order: { createdAt: 'DESC' },
-          take: 20,
+          take: 100,
         });
 
         // Also search for messages with similar IDs (in case of partial matches)
         const similarMessages = allMessages.filter(m =>
           m.whatsappMessageId &&
-          (m.whatsappMessageId.includes(whatsappMessageId.slice(-20)) ||
-            whatsappMessageId.includes(m.whatsappMessageId.slice(-20)))
+          (m.whatsappMessageId.includes(whatsappMessageId.slice(-10)) ||
+            whatsappMessageId.includes(m.whatsappMessageId.slice(-10)))
         );
 
         logger.warn(`⚠️ Message not found for WhatsApp ID: ${whatsappMessageId}`, {
@@ -465,9 +521,21 @@ export class ConversationService {
       if (status === MessageStatus.READ && !message.readAt) {
         message.readAt = timestamp || new Date();
       }
+      if (status === MessageStatus.FAILED && errorMessage) {
+        message.errorMessage = errorMessage;
+      }
 
       const updatedMessage = await this.messageRepository.save(message);
       logger.info(`Updated message status: ${whatsappMessageId} -> ${status}`);
+
+      // Emit real-time update
+      socketEmitter.emitMessageStatusUpdate({
+        messageId: updatedMessage.id,
+        whatsappMessageId: updatedMessage.whatsappMessageId || whatsappMessageId,
+        status: status,
+        conversationId: updatedMessage.conversationId,
+        timestamp: new Date().toISOString(),
+      });
 
       return updatedMessage;
     } catch (error) {
@@ -478,18 +546,93 @@ export class ConversationService {
 
   /**
    * Get all conversations for a user
+   * Returns conversations with all associated events (via invitations)
    */
-  async getUserConversations(userId: string): Promise<Conversation[]> {
+  async getUserConversations(userId: string, eventId?: string): Promise<any[]> {
     try {
-      const conversations = await this.conversationRepository
+      const queryBuilder = this.conversationRepository
         .createQueryBuilder('conversation')
         .leftJoinAndSelect('conversation.messages', 'messages')
-        .where('conversation.userId = :userId', { userId })
+        .leftJoinAndSelect('conversation.event', 'event')
+        .where('conversation.userId = :userId', { userId });
+
+      // Filter by event if provided - check both conversation.eventId and invitations
+      if (eventId && eventId !== 'all') {
+        // First, get phone numbers associated with this event via invitations
+        const invitationsWithEvent = await this.invitationRepository.find({
+          where: { eventId },
+          select: ['guestPhone'],
+        });
+        const phoneNumbersForEvent = invitationsWithEvent
+          .map(inv => inv.guestPhone?.replace(/[\s+]/g, ''))
+          .filter(Boolean);
+
+        // Filter conversations by eventId OR by phone numbers in invitations for this event
+        // This ensures we get all conversations where the phone number has an invitation for this event
+        if (phoneNumbersForEvent.length > 0) {
+          queryBuilder.andWhere(
+            '(conversation.eventId = :eventId OR conversation.phoneNumber IN (:...phoneNumbers))',
+            { eventId, phoneNumbers: phoneNumbersForEvent }
+          );
+        } else {
+          // No invitations for this event, so only check conversation.eventId
+          queryBuilder.andWhere('conversation.eventId = :eventId', { eventId });
+        }
+      }
+
+      const conversations = await queryBuilder
         .orderBy('conversation.lastMessageAt', 'DESC', 'NULLS LAST')
         .getMany();
 
+      // Enrich each conversation with all associated events via invitations
+      const enrichedConversations = await Promise.all(
+        conversations.map(async (conversation) => {
+          // Find all invitations for this phone number to get all associated events
+          const normalizedPhone = conversation.phoneNumber.replace(/[\s+]/g, '');
+          const invitations = await this.invitationRepository.find({
+            where: { guestPhone: normalizedPhone },
+            relations: ['event'],
+          });
+
+          // Get unique events from invitations
+          let associatedEvents = invitations
+            .map(inv => inv.event)
+            .filter((event): event is Event => event !== null && event !== undefined)
+            .filter((event, index, self) =>
+              index === self.findIndex(e => e.id === event.id)
+            )
+            .map(event => ({
+              id: event.id,
+              title: event.title,
+              eventDate: event.eventDate,
+            }));
+
+          // If filtering by eventId, only include conversations that have this event
+          // and only show this event in the events array (or all events if user wants to see all)
+          if (eventId) {
+            // Verify this conversation is actually associated with the filtered event
+            const hasFilteredEvent = associatedEvents.some(e => e.id === eventId);
+            if (!hasFilteredEvent) {
+              // This shouldn't happen due to the query filter, but just in case
+              return null;
+            }
+            // Optionally: only show the filtered event, or show all events
+            // For now, show all events but the filtered one will be in the list
+          }
+
+          // Return conversation with events array
+          return {
+            ...conversation,
+            events: associatedEvents,
+          };
+        })
+      );
+
+      // Filter out any null values (shouldn't happen, but safety check)
+      return enrichedConversations.filter(conv => conv !== null);
+
       // If no conversations, return empty array
-      return conversations || [];
+      return enrichedConversations || [];
     } catch (error: any) {
       // If tables don't exist yet, return empty array instead of throwing
       if (error.message?.includes('no such table') || error.message?.includes('does not exist')) {

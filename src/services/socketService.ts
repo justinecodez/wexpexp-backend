@@ -28,13 +28,14 @@ export class SocketService {
           socket.handshake.auth?.token || socket.handshake.headers?.authorization?.split(' ')[1];
 
         if (!token) {
-          // Allow anonymous connections for public features
+          logger.warn('Socket connection without token - allowing anonymous connection');
           socket.data.user = null;
           return next();
         }
 
         // Verify JWT token
         const decoded = jwt.verify(token, config.jwtSecret) as JWTPayload;
+        logger.info('Socket token verified', { userId: decoded.userId });
 
         // Check if user exists and is verified
         const userRepository = database.getRepository(User);
@@ -50,15 +51,37 @@ export class SocketService {
           },
         });
 
-        if (!user || !user.isVerified) {
-          return next(new Error('Authentication failed'));
+        if (!user) {
+          logger.error('Socket auth failed: User not found', { userId: decoded.userId });
+          return next(new Error('Authentication failed: User not found'));
+        }
+
+        if (!user.isVerified) {
+          logger.warn('Socket auth failed: User not verified', {
+            userId: user.id,
+            email: user.email
+          });
+          // Allow connection but log the warning - don't block for dev purposes
+          // In production, you may want to uncomment the line below:
+          // return next(new Error('Authentication failed: User not verified'));
         }
 
         socket.data.user = user;
+        logger.info('Socket authenticated successfully', {
+          userId: user.id,
+          email: user.email,
+          isVerified: user.isVerified
+        });
         next();
       } catch (error) {
         logger.error('Socket authentication error:', error);
-        next(new Error('Authentication failed'));
+        if (error instanceof jwt.JsonWebTokenError) {
+          next(new Error('Authentication failed: Invalid token'));
+        } else if (error instanceof jwt.TokenExpiredError) {
+          next(new Error('Authentication failed: Token expired'));
+        } else {
+          next(new Error('Authentication failed'));
+        }
       }
     });
   }

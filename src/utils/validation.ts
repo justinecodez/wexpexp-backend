@@ -75,22 +75,12 @@ export const createEventSchema = z.object({
   //   .regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, 'Invalid time format (HH:mm)')
   //   .optional(),
   endTime: z.string(),
+  hostname: z.string().optional(),
+  brideName: z.string().optional(),
+  groomName: z.string().optional(),
   venueName: z.string().optional(),
   venueAddress: z.string().optional(),
-  venueCity: z
-    .enum([
-      'DAR_ES_SALAAM',
-      'ARUSHA',
-      'ZANZIBAR',
-      'MWANZA',
-      'DODOMA',
-      'TANGA',
-      'MOROGORO',
-      'MBEYA',
-      'IRINGA',
-      'KILIMANJARO',
-    ])
-    .optional(),
+  venueCity: z.string().optional(),
   maxGuests: z.number().int().min(1, 'Must allow at least 1 guest'),
   budget: z.number().positive().optional(),
   isPublic: z.boolean().optional(),
@@ -99,7 +89,7 @@ export const createEventSchema = z.object({
 export const updateEventSchema = createEventSchema.partial();
 
 export const eventFilterSchema = z.object({
-  status: z.enum(['DRAFT', 'ACTIVE', 'COMPLETED', 'CANCELLED']).optional(),
+  status: z.enum(['UPCOMING', 'ACTIVE', 'COMPLETED', 'CANCELLED']).optional(),
   eventType: z
     .enum([
       'WEDDING',
@@ -112,20 +102,7 @@ export const eventFilterSchema = z.object({
       'OTHER',
     ])
     .optional(),
-  venueCity: z
-    .enum([
-      'DAR_ES_SALAAM',
-      'ARUSHA',
-      'ZANZIBAR',
-      'MWANZA',
-      'DODOMA',
-      'TANGA',
-      'MOROGORO',
-      'MBEYA',
-      'IRINGA',
-      'KILIMANJARO',
-    ])
-    .optional(),
+  venueCity: z.string().optional(),
   startDate: z.string().optional(),
   endDate: z.string().optional(),
   search: z.string().optional(),
@@ -424,9 +401,9 @@ export type EmailSchema = z.infer<typeof emailSchema>;
 export type SMSSchema = z.infer<typeof smsSchema>;
 export type WhatsAppSchema = z.infer<typeof whatsappSchema>;
 
-// Draft related schemas
-export const draftUpdateSchema = createEventSchema.partial().extend({
-  status: z.enum(['DRAFT']).optional(),
+// Event update related schemas
+export const eventUpdateSchema = createEventSchema.partial().extend({
+  status: z.enum(['UPCOMING', 'ACTIVE', 'COMPLETED', 'CANCELLED']).optional(),
   lastAutosaveAt: z.date().optional(),
 });
 
@@ -434,5 +411,5 @@ export const publishDraftSchema = z.object({
   draftId: z.string().uuid('Invalid draft ID'),
 });
 
-export type DraftUpdateSchema = z.infer<typeof draftUpdateSchema>;
+export type EventUpdateSchema = z.infer<typeof eventUpdateSchema>;
 export type PublishDraftSchema = z.infer<typeof publishDraftSchema>;

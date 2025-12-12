@@ -133,7 +133,11 @@ export class EventController {
       });
     }
 
+    console.log('=== CONTROLLER DEBUG ===');
+    console.log('req.body:', JSON.stringify(req.body));
+
     const { id } = req.params;
+
     const event = await eventService.updateEvent(
       id,
       req.user.userId,
