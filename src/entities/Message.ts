@@ -50,6 +50,13 @@ export class Message {
   @Column({ name: 'message_type', default: 'text' })
   messageType!: string; // text, image, template, etc.
 
+  @Column({
+    type: 'simple-enum',
+    enum: ['WHATSAPP', 'SMS'],
+    default: 'WHATSAPP'
+  })
+  channel!: 'WHATSAPP' | 'SMS';
+
   @Column('json', { nullable: true })
   metadata!: any; // Store media URLs, template info, etc.
 

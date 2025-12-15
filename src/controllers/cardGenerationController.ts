@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import cardGenerationService from '../services/cardGenerationService';
 import invitationService from '../services/invitationService';
 import eventService from '../services/eventService';
+import r2StorageService from '../services/r2StorageService';
 import { AppError } from '../middleware/errorHandler';
 import { AuthenticatedRequest } from '../types';
 import logger from '../config/logger';
@@ -29,14 +30,14 @@ export class CardGenerationController {
       // Get invitations for this event (with pagination - get all)
       const pagination = { page: 1, limit: 10000 }; // Get all invitations
       const invitationsResponse = await invitationService.getEventInvitations(
-        eventId, 
+        eventId,
         req.user.userId,
         pagination
       );
-      
+
       // Extract invitations array from paginated response
       let invitations = invitationsResponse.invitations;
-      
+
       // Filter to selected invitations if provided
       if (invitationIds && invitationIds.length > 0) {
         invitations = invitations.filter((inv: any) => invitationIds.includes(inv.id));
@@ -45,6 +46,21 @@ export class CardGenerationController {
       if (invitations.length === 0) {
         throw new AppError('No invitations found', 404, 'NO_INVITATIONS');
       }
+
+      // 🔥 NEW: Delete old cards before regenerating
+      const oldCardUrls = invitations
+        .map((inv: any) => inv.cardUrl)
+        .filter((url: string) => url); // Only non-empty URLs
+
+      if (oldCardUrls.length > 0) {
+        logger.info(`🗑️ Deleting ${oldCardUrls.length} old cards before regeneration...`);
+        const deleteResult = await r2StorageService.deleteMultipleCards(oldCardUrls);
+        logger.info(`✅ Deleted ${deleteResult.deleted} cards, ${deleteResult.failed} failed`);
+      }
+
+      // Clear cardUrl from invitation records
+      const invitationIdsToUpdate = invitations.map((inv: any) => inv.id);
+      await invitationService.clearCardUrls(invitationIdsToUpdate);
 
       // Get event to retrieve title for file path
       const event = await eventService.getEventById(eventId, req.user.userId);
@@ -90,11 +106,11 @@ export class CardGenerationController {
 
       // Transform backend status to frontend format
       const frontendStatus = {
-        status: batchStatus.status === 'processing' 
-          ? 'in_progress' 
-          : batchStatus.status === 'queued' 
-          ? 'pending' 
-          : batchStatus.status,
+        status: batchStatus.status === 'processing'
+          ? 'in_progress'
+          : batchStatus.status === 'queued'
+            ? 'pending'
+            : batchStatus.status,
         total: batchStatus.totalJobs,
         completed: batchStatus.completedJobs,
         failed: batchStatus.failedJobs,

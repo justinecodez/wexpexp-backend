@@ -127,6 +127,7 @@ export class CardGenerationService {
           email: invitation.guestEmail || '',
           phone: invitation.guestPhone || '',
           status: invitation.rsvpStatus || 'pending',
+          qrCode: invitation.qrCode || '', // Pass QR code string to worker
           // Add more fields as needed from invitation
         };
 

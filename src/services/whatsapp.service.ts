@@ -354,12 +354,13 @@ export class WhatsAppService {
             // Store the automated response in conversation
             if (response && response.messages && response.messages[0]) {
                 await conversationService.storeOutgoingMessage(
-                    phone,
-                    response.messages[0].id,
-                    msg,
-                    'text',
-                    undefined,
-                    contactName
+                    invitation.event.userId, // userId (was missing!)
+                    phone, // phoneNumber  
+                    msg, // content
+                    response.messages[0].id, // whatsappMessageId
+                    'text', // messageType
+                    { contactName }, // metadata
+                    'WHATSAPP' // channel
                 );
             }
 
@@ -447,12 +448,13 @@ export class WhatsAppService {
             // Store the automated response in conversation
             if (response && response.messages && response.messages[0]) {
                 await conversationService.storeOutgoingMessage(
-                    phone,
-                    response.messages[0].id,
-                    msg,
-                    'text',
-                    undefined,
-                    contactName
+                    invitation.event.userId, // userId (was missing!)
+                    phone, // phoneNumber
+                    msg, // content
+                    response.messages[0].id, // whatsappMessageId
+                    'text', // messageType
+                    { contactName }, // metadata
+                    'WHATSAPP' // channel
                 );
             }
 
@@ -859,6 +861,7 @@ export class WhatsAppService {
             venueName?: string;
             venueAddress?: string;
             user?: { firstName?: string; lastName?: string };
+            hostname?: string;
             brideName?: string;
             groomName?: string;
         },
@@ -902,10 +905,10 @@ export class WhatsAppService {
             .filter(Boolean)
             .join(', ');
 
-        // Build host name - use custom if provided, otherwise from user firstName and lastName
-        const hostName = customVariables?.hostname || (event.user
-            ? [event.user.firstName, event.user.lastName].filter(Boolean).join(' and ')
-            : 'Family');
+        // Build host name - prioritize: custom var > event hostname > user name > fallback
+        const hostName = customVariables?.hostname ||
+            (event as any).hostname ||
+            (event.user ? [event.user.firstName, event.user.lastName].filter(Boolean).join(' ') : 'Family');
 
         // Use brideName/groomName from event, or fallback to defaults
         const brideName = event.brideName || 'Bride';
@@ -1003,6 +1006,7 @@ export class WhatsAppService {
             venueName?: string;
             venueAddress?: string;
             user?: { firstName?: string; lastName?: string };
+            hostname?: string;
             brideName?: string;
             groomName?: string;
         },
@@ -1050,10 +1054,10 @@ export class WhatsAppService {
             .filter(Boolean)
             .join(', ');
 
-        // Build host name - use custom if provided, otherwise from user firstName and lastName
-        const hostName = customVariables?.hostname || (event.user
-            ? [event.user.firstName, event.user.lastName].filter(Boolean).join(' and ')
-            : 'Family');
+        // Build host name - prioritize: custom var > event hostname > user name > fallback
+        const hostName = customVariables?.hostname ||
+            (event as any).hostname ||
+            (event.user ? [event.user.firstName, event.user.lastName].filter(Boolean).join(' ') : 'Family');
 
         // Use brideName/groomName from event or custom variables, or fallback to defaults
         const brideName = customVariables?.bridename || event.brideName || 'Bride';
@@ -1133,6 +1137,7 @@ export class WhatsAppService {
             venueName?: string;
             venueAddress?: string;
             user?: { firstName?: string; lastName?: string };
+            hostname?: string;
             brideName?: string;
             groomName?: string;
         },
@@ -1168,10 +1173,9 @@ export class WhatsAppService {
             .filter(Boolean)
             .join(', ');
 
-        // Build host name from user firstName and lastName
-        const hostName = event.user
-            ? [event.user.firstName, event.user.lastName].filter(Boolean).join(' na ')
-            : 'Familia';
+        // Build host name - prioritize: event hostname > user name (with 'na' in Swahili) > fallback
+        const hostName = (event as any).hostname ||
+            (event.user ? [event.user.firstName, event.user.lastName].filter(Boolean).join(' na ') : 'Familia');
 
         // Use brideName/groomName from event, or fallback to Swahili defaults
         const brideName = event.brideName || 'Bibi';

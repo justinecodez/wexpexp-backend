@@ -4,33 +4,31 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const requiredEnvVars = [
-    'BACKBLAZE_B2_ENDPOINT',
-    'BACKBLAZE_B2_KEY_ID',
-    'BACKBLAZE_B2_APPLICATION_KEY',
-    'BACKBLAZE_B2_BUCKET',
-    'BACKBLAZE_B2_BUCKET_ID'
+    'S3_ENDPOINT',
+    'S3_ACCESS_KEY_ID',
+    'S3_SECRET_ACCESS_KEY',
+    'S3_BUCKET_NAME'
 ];
 
 const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
 
 if (missingVars.length > 0) {
-    console.warn(`⚠️ Missing Backblaze B2 environment variables: ${missingVars.join(', ')}`);
+    console.warn(`⚠️ Missing S3/R2 environment variables: ${missingVars.join(', ')}`);
 }
 
 const s3Client = new S3Client({
-    endpoint: `https://${process.env.BACKBLAZE_B2_ENDPOINT}`,
-    region: 'eu-central-003', // Derived from endpoint or configurable
+    endpoint: process.env.S3_ENDPOINT,
+    region: process.env.S3_REGION || 'auto',
     credentials: {
-        accessKeyId: process.env.BACKBLAZE_B2_KEY_ID || '',
-        secretAccessKey: process.env.BACKBLAZE_B2_APPLICATION_KEY || ''
+        accessKeyId: process.env.S3_ACCESS_KEY_ID || '',
+        secretAccessKey: process.env.S3_SECRET_ACCESS_KEY || ''
     },
-    forcePathStyle: true // Needed for some S3 compatible storages, usually good for B2
+    forcePathStyle: true // Needed for R2 and generic S3-compatible endpoints
 });
 
 export const s3Config = {
-    bucketName: process.env.BACKBLAZE_B2_BUCKET || '',
-    bucketId: process.env.BACKBLAZE_B2_BUCKET_ID || '',
-    region: 'eu-central-003'
+    bucketName: process.env.S3_BUCKET_NAME || '',
+    region: process.env.S3_REGION || 'auto'
 };
 
 export default s3Client;

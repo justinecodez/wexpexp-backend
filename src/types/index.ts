@@ -172,6 +172,7 @@ export interface InvitationResponse {
   rsvpAt?: Date;
   plusOneCount: number;
   qrCode?: string;
+  checkInCode?: string;
   checkInTime?: Date;
   specialRequirements?: string;
   cardUrl?: string;
@@ -271,6 +272,7 @@ export interface SMSRequest {
   to: string | string[];
   message: string;
   scheduled?: Date;
+  userId?: string;
 }
 
 export interface WhatsAppRequest {

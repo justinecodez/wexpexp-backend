@@ -293,7 +293,7 @@ export class CommunicationService {
 
         // Choose SMS provider based on configuration
         if (config.sms.provider === 'messaging-service') {
-          response = await this.sendSMSMessagingService(formattedPhone, smsData.message);
+          response = await this.sendSMSMessagingService(formattedPhone, smsData.message, smsData.userId);
         } else if (config.sms.provider === 'beem') {
           response = await this.sendSMSBeem(formattedPhone, smsData.message);
         } else if (config.sms.provider === 'ttcl') {
@@ -356,6 +356,115 @@ export class CommunicationService {
     }
 
     return results;
+  }
+
+  /**
+   * Substitute template variables in message with actual data
+   */
+  private substituteMessageVariables(
+    message: string,
+    invitation?: Invitation & { event?: Event },
+    event?: Event
+  ): string {
+    if (!message) return message;
+
+    let substituted = message;
+
+    // Guest/Invitation variables
+    if (invitation) {
+      substituted = substituted
+        .replace(/\{name\}/gi, invitation.guestName || '')
+        .replace(/\{email\}/gi, (invitation as any).email || '')
+        .replace(/\{phone\}/gi, (invitation as any).phone || '')
+        .replace(/\{status\}/gi, (invitation as any).status || '');
+    }
+
+    // Event variables (use passed event or invitation.event)
+    const eventData = event || invitation?.event;
+    if (eventData) {
+      // Format event date if available
+      const formattedEventDate = eventData.eventDate
+        ? new Date(eventData.eventDate).toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        })
+        : '';
+
+      substituted = substituted
+        .replace(/\{eventTitle\}/gi, eventData.title || '')
+        .replace(/\{eventDate\}/gi, formattedEventDate)
+        .replace(/\{startTime\}/gi, eventData.startTime || '')
+        .replace(/\{endTime\}/gi, eventData.endTime || '')
+        .replace(/\{venueName\}/gi, eventData.venueName || '')
+        .replace(/\{venueAddress\}/gi, eventData.venueAddress || '')
+        .replace(/\{brideName\}/gi, (eventData as any).brideName || '')
+        .replace(/\{groomName\}/gi, (eventData as any).groomName || '')
+        .replace(/\{hostname\}/gi, (eventData as any).hostname || '');
+    }
+
+    // RSVP link from invitation
+    if (invitation?.qrCode) {
+      const rsvpLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/rsvp/${invitation.qrCode}`;
+      substituted = substituted.replace(/\{rsvpLink\}/gi, rsvpLink);
+    } else {
+      substituted = substituted.replace(/\{rsvpLink\}/gi, '');
+    }
+
+    // Check-in code (if available)
+    const checkInCode = (invitation as any)?.checkInCode || '';
+    substituted = substituted.replace(/\{checkInCode\}/gi, checkInCode);
+
+    return substituted;
+  }
+
+  /**
+   * Construct human-readable wedding invitation message from template data
+   * This creates the actual message text that will be stored in the database
+   * and displayed in the chat interface
+   */
+  private constructWeddingInvitationMessage(
+    guestName: string,
+    hostname: string,
+    brideName: string,
+    groomName: string,
+    eventDate: string,
+    venueName: string,
+    venueAddress: string,
+    startTime: string,
+    endTime: string
+  ): string {
+    // Format times to 12-hour with AM/PM
+    const formatTime = (time: string): string => {
+      if (!time) return 'Time';
+      const [hours, minutes] = time.split(':');
+      const hour = parseInt(hours);
+      if (hour === 0) return `12:${minutes} AM`;
+      if (hour < 12) return `${hour}:${minutes} AM`;
+      if (hour === 12) return `12:${minutes} PM`;
+      return `${hour - 12}:${minutes} PM`;
+    };
+
+    // Format date
+    const formattedDate = eventDate
+      ? new Date(eventDate).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      })
+      : 'Event Date';
+
+    // Build venue string
+    const venue = [venueName, venueAddress].filter(Boolean).join(', ') || 'Event Venue';
+
+    // Construct the message matching the wedding_invitation_with_image template format
+    return `Dear ${guestName},
+
+The family of Mr. and Mrs. ${hostname} would like to invite you to the wedding of their beloved ${brideName} and ${groomName},
+
+Which will take place on ${formattedDate} at ${venue}, from ${formatTime(startTime)} to ${formatTime(endTime)}.
+
+We look forward to celebrating with you.`;
   }
 
   /**
@@ -422,26 +531,126 @@ export class CommunicationService {
         const savedMessageLog = await this.messageLogRepository.save(messageLogData);
 
         // Also store in Message table (for chat system and webhook status updates) if userId is provided
+        const hasTemplateVariables = whatsappData.message.includes('{') && whatsappData.message.includes('}');
+
+        // Check if we have constructed content from template (for WhatsApp templates)
+        const messageContentToStore = (response as any).constructedContent || whatsappData.message;
+
+        console.log('================================================================================');
+        console.log('💾 WHATSAPP STORAGE: Determining content to store');
+        console.log('================================================================================');
+        console.log(`   Has constructed content: ${!!(response as any).constructedContent}`);
+        console.log(`   Original message (first 100 chars): ${whatsappData.message.substring(0, 100)}...`);
+        console.log(`   Content to store (first 100 chars): ${messageContentToStore.substring(0, 100)}...`);
+
+        console.log('================================================================================');
+        console.log('💾 WHATSAPP STORAGE: Starting message storage process');
+        console.log('================================================================================');
+        console.log(`   Recipient: ${formattedPhone}`);
+        console.log(`   User ID: ${userId}`);
+        console.log(`   WhatsApp Message ID: ${whatsappMessageId}`);
+        console.log(`   Has Template Variables: ${hasTemplateVariables}`);
+        console.log(`   Original Message (first 150 chars): ${whatsappData.message.substring(0, 150)}...`);
+        console.log(`   Invitation ID: ${whatsappData.invitationId || 'NOT PROVIDED'}`);
+        console.log(`   Event ID: ${whatsappData.eventId || 'NOT PROVIDED'}`);
+
         if (userId && response.success && whatsappMessageId) {
           try {
+            let messageToStore = whatsappData.message;
+
+            // If message has template variables, fetch data and substitute them
+            if (hasTemplateVariables && (whatsappData.invitationId || whatsappData.eventId)) {
+              console.log('🔄 WHATSAPP STORAGE: Template variables detected - will substitute');
+              logger.info(`📝 Substituting template variables before storing message`, {
+                hasInvitationId: !!whatsappData.invitationId,
+                hasEventId: !!whatsappData.eventId
+              });
+
+              let invitation: Invitation | null = null;
+              let event: Event | null = null;
+
+              // Fetch invitation and event data
+              if (whatsappData.invitationId) {
+                console.log(`   📋 Fetching invitation: ${whatsappData.invitationId}`);
+                invitation = await this.invitationRepository.findOne({
+                  where: { id: whatsappData.invitationId },
+                  relations: ['event']
+                });
+                if (invitation) {
+                  console.log(`   ✅ Invitation found: ${invitation.guestName}`);
+                  event = invitation.event;
+                  if (event) {
+                    console.log(`   ✅ Event found: ${event.title}`);
+                  }
+                } else {
+                  console.warn(`   ⚠️  Invitation NOT found for ID: ${whatsappData.invitationId}`);
+                }
+              } else if (whatsappData.eventId) {
+                console.log(`   📅 Fetching event: ${whatsappData.eventId}`);
+                event = await this.eventRepository.findOne({
+                  where: { id: whatsappData.eventId }
+                });
+                if (event) {
+                  console.log(`   ✅ Event found: ${event.title}`);
+                } else {
+                  console.warn(`   ⚠️  Event NOT found for ID: ${whatsappData.eventId}`);
+                }
+              }
+
+              console.log('   🔧 Calling substituteMessageVariables...');
+              // Substitute variables
+              messageToStore = this.substituteMessageVariables(whatsappData.message, invitation || undefined, event || undefined);
+
+              console.log('   ✅ Variables substituted!');
+              console.log(`   📝 Substituted Message (first 150 chars): ${messageToStore.substring(0, 150)}...`);
+
+              logger.info(`✅ Variables substituted in message`, {
+                originalLength: whatsappData.message.length,
+                substitutedLength: messageToStore.length,
+                preview: messageToStore.substring(0, 100) + '...'
+              });
+
+              // Check if substitution actually happened
+              const stillHasVars = /\{[^}]+\}/g.test(messageToStore);
+              if (stillHasVars) {
+                console.error('   ❌ WARNING: Message STILL contains template variables after substitution!');
+                logger.error('Template variable substitution may have failed - variables still present');
+              } else {
+                console.log('   ✅ Template variables successfully replaced');
+              }
+            } else {
+              if (hasTemplateVariables) {
+                console.warn('⚠️  WHATSAPP STORAGE: Template variables detected but NO invitationId/eventId provided!');
+                console.warn('   Message will be stored WITH UNREPLACED VARIABLES');
+              } else {
+                console.log('ℹ️  WHATSAPP STORAGE: No template variables detected - storing as-is');
+              }
+            }
+
+            console.log('💾 WHATSAPP STORAGE: Calling storeOutgoingMessage...');
+            console.log(`   Content to store (first 200 chars): ${messageToStore.substring(0, 200)}...`);
+
             // Lazy import to avoid circular dependency
             const conversationService = (await import('./conversationService')).default;
             await conversationService.storeOutgoingMessage(
               userId,
               formattedPhone,
-              whatsappData.message,
+              messageToStore, // Store the substituted message
               whatsappMessageId,
               whatsappData.mediaUrl ? 'image' : 'text',
               {
                 mediaUrl: whatsappData.mediaUrl,
                 sentFrom: 'communications_page',
-              }
+              },
+              'WHATSAPP' // Explicitly set channel
             );
             logger.info(`✅ Stored WhatsApp message in chat database for webhook tracking: ${whatsappMessageId}`);
           } catch (chatError: any) {
             // Don't fail the entire send if chat storage fails
             logger.warn(`⚠️ Failed to store message in chat database (non-critical): ${chatError.message}`);
           }
+        } else if (hasTemplateVariables) {
+          logger.info(`⏩ Skipping chat storage for message with template variables: ${whatsappData.message.substring(0, 50)}...`);
         }
 
         results.push({
@@ -483,23 +692,71 @@ export class CommunicationService {
    */
   private async sendSMSMessagingService(
     phone: string,
-    message: string
+    message: string,
+    userId?: string
   ): Promise<{ success: boolean; error?: string; metadata?: any }> {
     try {
+      console.log('📤 sendSMSMessagingService called:');
+      console.log(`   Phone: ${phone}`);
+      console.log(`   User ID: ${userId}`);
+      console.log(`   Message length: ${message.length}`);
+      console.log(`   Message content:\n   ${'-'.repeat(70)}\n   ${message}\n   ${'-'.repeat(70)}`);
+
       const smsService = getDefaultSMSService();
 
       // Validate and format phone number
       const phoneValidation = smsService.validatePhoneNumber(phone);
       if (!phoneValidation.isValid) {
+        console.log(`   ❌ Phone validation failed: ${phoneValidation.error}`);
         throw new Error(phoneValidation.error || 'Invalid phone number format');
       }
+
+      console.log(`   ✅ Phone validated: ${phoneValidation.formatted}`);
+      console.log(`   📡 Sending SMS via messaging-service...`);
 
       const result = await smsService.sendToSingle(
         phoneValidation.formatted!,
         message
       );
 
+      console.log(`   📊 SMS send result:`, {
+        success: result.success,
+        messageId: result.messageId,
+        error: result.error
+      });
+
+      // Store in Chat System if successful (and userId provided)
+      if (result.success && userId) {
+        try {
+          console.log(`   💾 Storing SMS in chat database...`);
+          console.log(`   💾 Message to store:\n   ${'-'.repeat(70)}\n   ${message}\n   ${'-'.repeat(70)}`);
+
+          const conversationService = (await import('./conversationService')).default;
+          await conversationService.storeOutgoingMessage(
+            userId,
+            phoneValidation.formatted!,
+            message,  // ⚠️ THIS is the message being stored!
+            result.messageId,
+            'text',
+            {
+              provider: 'messaging-service',
+              cost: result.cost,
+              reference: result.reference
+            },
+            'SMS'
+          );
+          console.log(`   ✅ Stored SMS in chat database: ${result.messageId}`);
+          logger.info(`✅ Stored SMS in chat database: ${result.messageId}`);
+        } catch (chatError: any) {
+          console.log(`   ❌ Failed to store SMS in chat database: ${chatError.message}`);
+          logger.warn(`⚠️ Failed to store SMS in chat database: ${chatError.message}`);
+        }
+      } else if (!userId) {
+        console.log(`   ⚠️  No userId provided - skipping chat storage`);
+      }
+
       if (result.success) {
+        console.log(`   ✅ SMS sent successfully!`);
         return {
           success: true,
           metadata: {
@@ -510,6 +767,7 @@ export class CommunicationService {
           }
         };
       } else {
+        console.log(`   ❌ SMS sending failed: ${result.error}`);
         return {
           success: false,
           error: result.error || 'SMS sending failed',
@@ -517,6 +775,7 @@ export class CommunicationService {
         };
       }
     } catch (error) {
+      console.log(`   ❌ SMS service error:`, error);
       logger.error('Messaging service SMS error:', error);
       return {
         success: false,
@@ -662,10 +921,11 @@ export class CommunicationService {
           data.templateParams || []
         );
       } else if (data.useTemplate && (data.invitationId || data.eventId)) {
-        // Use wedding invitation template (card attachment is optional)
-        logger.info(`📧 Processing template request for ${phone}`, {
+        // Variable to store constructed message content for template messages
+        let constructedMessageContent: string | undefined = undefined;
+
+        logger.info(`🎯 Using WhatsApp template for ${phone}`, {
           phone,
-          useTemplate: data.useTemplate,
           invitationId: data.invitationId,
           eventId: data.eventId,
           includeCardAttachment: data.includeCardAttachment,
@@ -731,6 +991,16 @@ export class CommunicationService {
             // Use custom template variables if provided, otherwise use defaults
             const customVars = data.templateVariables || {};
 
+            // Debug: Log event hostname to verify it's being fetched from database
+            console.log('🔍 Event data for template:', {
+              eventId: event.id,
+              hostname: (event as any).hostname,
+              brideName: (event as any).brideName,
+              groomName: (event as any).groomName,
+              userName: event.user ? `${event.user.firstName} ${event.user.lastName}` : 'N/A',
+              customVars
+            });
+
             // Choose template based on whether we have a valid card URL
             if (cardUrl) {
               // Use wedding_invitation_with_image template when card is available
@@ -749,34 +1019,65 @@ export class CommunicationService {
                 hasCard: true,
                 cardUrl: 'provided (public URL)',
                 includeCardAttachment: data.includeCardAttachment,
-                templateName: 'wedding_invitation_with_image'
+                templateName: 'wedding_invitation_with_image',
+                language: data.language || 'en'
               });
 
-              response = await this.whatsAppService.sendWeddingInvitationWithImage(
-                phone,
-                {
-                  guestName: customVars.guestname || invitation.guestName,
-                  cardUrl: cardUrl
-                },
-                {
-                  eventDate: event.eventDate,
-                  startTime: customVars.starttime || event.startTime,
-                  endTime: customVars.endtime || event.endTime,
-                  venueName: event.venueName,
-                  venueAddress: event.venueAddress,
-                  user: event.user,
-                  brideName: customVars.bridename || (event as any).brideName,
-                  groomName: customVars.groomname || (event as any).groomName,
-                },
-                cardUrl,
-                rsvpLink,
-                'en', // Use 'en' to match working format
-                {
-                  hostname: customVars.hostname,
-                  eventdate: customVars.eventdate,
-                  venue: customVars.venue,
-                }
-              );
+              // Check language and use appropriate template
+              const selectedLanguage = data.language || 'en';
+
+              if (selectedLanguage === 'sw') {
+                // Use Swahili template with card
+                response = await this.whatsAppService.sendSwahiliWeddingInvitation(
+                  phone,
+                  {
+                    guestName: customVars.guestname || invitation.guestName,
+                    cardUrl: cardUrl
+                  },
+                  {
+                    eventDate: event.eventDate,
+                    startTime: customVars.starttime || event.startTime,
+                    endTime: customVars.endtime || event.endTime,
+                    venueName: event.venueName,
+                    venueAddress: event.venueAddress,
+                    user: event.user,
+                    brideName: customVars.bridename || (event as any).brideName,
+                    groomName: customVars.groomname || (event as any).groomName,
+                    hostname: (event as any).hostname,
+                  },
+                  cardUrl,
+                  rsvpLink,
+                  'sw' // Swahili language code
+                );
+              } else {
+                // Use English template with card
+                response = await this.whatsAppService.sendWeddingInvitationWithImage(
+                  phone,
+                  {
+                    guestName: customVars.guestname || invitation.guestName,
+                    cardUrl: cardUrl
+                  },
+                  {
+                    eventDate: event.eventDate,
+                    startTime: customVars.starttime || event.startTime,
+                    endTime: customVars.endtime || event.endTime,
+                    venueName: event.venueName,
+                    venueAddress: event.venueAddress,
+                    user: event.user,
+                    brideName: customVars.bridename || (event as any).brideName,
+                    groomName: customVars.groomname || (event as any).groomName,
+                    hostname: (event as any).hostname,
+                  },
+                  cardUrl,
+                  rsvpLink,
+                  selectedLanguage, // Use selected language
+                  {
+                    hostname: customVars.hostname,
+                    eventdate: customVars.eventdate,
+                    venue: customVars.venue,
+                  }
+                );
+              }
 
               console.log('✅ wedding_invitation_with_image template response ==========================================>', {
                 phone,
@@ -828,6 +1129,7 @@ export class CommunicationService {
                     user: event.user,
                     brideName: customVars.bridename || (event as any).brideName,
                     groomName: customVars.groomname || (event as any).groomName,
+                    hostname: (event as any).hostname,
                   },
                   '', // No card image URL
                   rsvpLink,
@@ -849,6 +1151,7 @@ export class CommunicationService {
                     user: event.user,
                     brideName: customVars.bridename || (event as any).brideName,
                     groomName: customVars.groomname || (event as any).groomName,
+                    hostname: (event as any).hostname,
                   },
                   rsvpLink,
                   selectedLanguage,
@@ -871,6 +1174,27 @@ export class CommunicationService {
                 messageId: response.messages?.[0]?.id,
                 messageStatus: response.messages?.[0]?.message_status
               });
+
+              // Construct human-readable message for database storage
+              if (response.messages?.[0]?.id) {
+                console.log('📝 TEMPLATE: Constructing message content for storage');
+                try {
+                  constructedMessageContent = this.constructWeddingInvitationMessage(
+                    customVars.guestname || invitation.guestName,
+                    (event as any).hostname || `${event.user?.firstName} ${event.user?.lastName}`,
+                    (event as any).brideName || 'Bride',
+                    (event as any).groomName || 'Groom',
+                    event.eventDate.toISOString(), // Convert Date to string
+                    event.venueName,
+                    event.venueAddress,
+                    customVars.starttime || event.startTime,
+                    customVars.endtime || event.endTime
+                  );
+                  console.log(`✅ TEMPLATE: Message constructed - ${constructedMessageContent.substring(0, 80)}...`);
+                } catch (error) {
+                  console.error('❌ TEMPLATE: Construction failed:', error);
+                }
+              }
             }
           } else {
             // If useTemplate is true but data not found, return error instead of falling back

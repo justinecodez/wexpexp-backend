@@ -100,6 +100,16 @@ router.post('/qr/:qrCode/checkin',
 );
 
 /**
+ * @route   POST /api/invitations/checkin-by-code
+ * @desc    Check-in guest using 6-digit check-in code (OCR-based for non-smartphone users)
+ * @access  Public (but validates code)
+ */
+router.post('/checkin-by-code',
+  validateBody(z.object({ checkInCode: z.string().length(6, 'Check-in code must be 6 digits') })),
+  invitationController.checkInGuestByCode
+);
+
+/**
  * @route   POST /api/invitations/:id/resend
  * @desc    Resend invitation
  * @access  Private

@@ -26,6 +26,13 @@ export class Conversation {
   @Column({ name: 'contact_name', nullable: true })
   contactName!: string;
 
+  @Column({
+    type: 'simple-enum',
+    enum: ['WHATSAPP', 'SMS'],
+    default: 'WHATSAPP'
+  })
+  channel!: 'WHATSAPP' | 'SMS';
+
   @Column({ name: 'last_message_at', nullable: true })
   lastMessageAt!: Date;
 

@@ -29,9 +29,10 @@ export class ConversationController {
       }
 
       const eventId = req.query.eventId as string | undefined;
+      const channel = req.query.channel as 'WHATSAPP' | 'SMS' | undefined;
 
-      logger.info(`Fetching conversations for user: ${req.user.userId}${eventId ? ` filtered by event: ${eventId}` : ''}`);
-      const conversations = await conversationService.getUserConversations(req.user.userId, eventId);
+      logger.info(`Fetching conversations for user: ${req.user.userId}${eventId ? ` filtered by event: ${eventId}` : ''}${channel ? ` filtered by channel: ${channel}` : ''}`);
+      const conversations = await conversationService.getUserConversations(req.user.userId, eventId, channel);
 
       res.status(200).json({
         success: true,

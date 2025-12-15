@@ -171,6 +171,22 @@ export class InvitationController {
   });
 
   /**
+   * Check-in guest using 6-digit check-in code (OCR-based for non-smartphone users)
+   */
+  checkInGuestByCode = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+    const { checkInCode } = req.body;
+    const invitation = await invitationService.checkInGuestByCode(checkInCode);
+
+    const response: ApiResponse = {
+      success: true,
+      message: 'Guest checked in successfully using code',
+      data: { invitation },
+    };
+
+    res.status(200).json(response);
+  });
+
+  /**
    * Resend invitation
    */
   resendInvitation = catchAsync(
@@ -413,8 +429,8 @@ export class InvitationController {
 
       // Update invitation with card URL and optional personalized message
       const invitation = await invitationService.updateInvitationCardUrl(
-        id, 
-        cardUrl, 
+        id,
+        cardUrl,
         personalizedMessage
       );
 

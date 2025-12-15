@@ -57,6 +57,7 @@ export const passwordResetLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  validate: false, // Disable trust proxy validation to prevent warnings
   handler: (req: Request, res: Response) => {
     logger.warn(`Password reset rate limit exceeded for IP: ${req.ip}`);
     res.status(429).json({
@@ -76,6 +77,7 @@ export const emailLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  validate: false, // Disable trust proxy validation to prevent warnings
   handler: (req: Request, res: Response) => {
     logger.warn(`Email rate limit exceeded for IP: ${req.ip}`);
     res.status(429).json({
@@ -95,6 +97,7 @@ export const smsLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  validate: false, // Disable trust proxy validation to prevent warnings
   handler: (req: Request, res: Response) => {
     logger.warn(`SMS rate limit exceeded for IP: ${req.ip}`);
     res.status(429).json({
@@ -114,6 +117,7 @@ export const uploadLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  validate: false, // Disable trust proxy validation to prevent warnings
   handler: (req: Request, res: Response) => {
     logger.warn(`Upload rate limit exceeded for IP: ${req.ip}`);
     res.status(429).json({
@@ -133,6 +137,7 @@ export const apiLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  validate: false, // Disable trust proxy validation to prevent warnings
   handler: (req: Request, res: Response) => {
     logger.warn(`API rate limit exceeded for IP: ${req.ip} on ${req.path}`);
     res.status(429).json({
@@ -152,6 +157,7 @@ export const messagingLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  validate: false, // Disable trust proxy validation to prevent warnings
   handler: (req: Request, res: Response) => {
     logger.warn(`Messaging rate limit exceeded for IP: ${req.ip}`);
     res.status(429).json({
@@ -177,6 +183,7 @@ export const createRateLimiter = (
     },
     standardHeaders: true,
     legacyHeaders: false,
+    validate: false, // Disable trust proxy validation to prevent warnings
     skipSuccessfulRequests,
     handler: (req: Request, res: Response) => {
       logger.warn(`Custom rate limit exceeded for IP: ${req.ip} on ${req.path}`);
@@ -198,6 +205,7 @@ export const chatLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  validate: false, // Disable trust proxy validation to prevent warnings
   skipSuccessfulRequests: false,
   handler: (req: Request, res: Response) => {
     logger.warn(`Chat rate limit exceeded for IP: ${req.ip} on ${req.path}`);

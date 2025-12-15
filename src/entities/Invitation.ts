@@ -65,6 +65,9 @@ export class Invitation {
   @Column({ name: 'qr_code_url', nullable: true })
   qrCodeUrl!: string;
 
+  @Column({ name: 'check_in_code', unique: true, nullable: true, length: 6 })
+  checkInCode!: string;
+
   @Column({ name: 'card_url', nullable: true })
   cardUrl!: string;
 

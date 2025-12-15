@@ -54,7 +54,8 @@ export class ConversationService {
   async getOrCreateConversation(
     userId: string,
     phoneNumber: string,
-    contactName?: string
+    contactName?: string,
+    channel: 'WHATSAPP' | 'SMS' = 'WHATSAPP'
   ): Promise<Conversation> {
     // Normalize phone number (remove + and spaces)
     const normalizedPhone = phoneNumber.replace(/[\s+]/g, '');
@@ -85,6 +86,7 @@ export class ConversationService {
       where: {
         userId,
         phoneNumber: normalizedPhone,
+        channel,
       },
       relations: ['messages'],
     });
@@ -94,6 +96,7 @@ export class ConversationService {
         userId,
         phoneNumber: normalizedPhone,
         contactName: finalContactName,
+        channel,
         unreadCount: 0,
       });
       conversation = await this.conversationRepository.save(conversation);
@@ -155,7 +158,8 @@ export class ConversationService {
     content: string,
     messageType: string = 'text',
     metadata?: any,
-    contactName?: string
+    contactName?: string,
+    channel: 'WHATSAPP' | 'SMS' = 'WHATSAPP'
   ): Promise<Message> {
     try {
       logger.info(`Storing incoming message from ${phoneNumber}, type: ${messageType}`);
@@ -181,7 +185,8 @@ export class ConversationService {
       const conversation = await this.getOrCreateConversation(
         userId,
         phoneNumber,
-        contactName
+        contactName,
+        channel
       );
 
       if (!conversation) {
@@ -201,6 +206,7 @@ export class ConversationService {
         direction: MessageDirection.INBOUND,
         content,
         messageType,
+        channel,
         status: MessageStatus.DELIVERED, // Incoming messages are already delivered
         metadata,
         sentAt: new Date(),
@@ -216,6 +222,7 @@ export class ConversationService {
         direction: MessageDirection.INBOUND,
         content,
         messageType,
+        channel,
         status: MessageStatus.DELIVERED,
         metadata,
         sentAt: new Date(),
@@ -275,12 +282,31 @@ export class ConversationService {
     content: string,
     whatsappMessageId?: string,
     messageType: string = 'text',
-    metadata?: any
+    metadata?: any,
+    channel: 'WHATSAPP' | 'SMS' = 'WHATSAPP'
   ): Promise<Message> {
     try {
+      console.log('💾 storeOutgoingMessage called:');
+      console.log(`   User ID: ${userId}`);
+      console.log(`   Phone: ${phoneNumber}`);
+      console.log(`   Channel: ${channel}`);
+      console.log(`   Message Type: ${messageType}`);
+      console.log(`   Content length: ${content.length}`);
+      console.log(`   Content to store:\n   ${'-'.repeat(70)}\n   ${content}\n   ${'-'.repeat(70)}`);
+
+      // Check if content has template variables
+      const hasTemplateVars = /\{[^}]+\}/g.test(content);
+      if (hasTemplateVars) {
+        const remainingVars = content.match(/\{[^}]+\}/g);
+        console.log(`   ⚠️  WARNING: Content still has template variables!`);
+        console.log(`   ⚠️  Variables found:`, remainingVars);
+      } else {
+        console.log(`   ✅ No template variables in content`);
+      }
+
       logger.info(`Storing outgoing message to ${phoneNumber} for user ${userId}`);
 
-      const conversation = await this.getOrCreateConversation(userId, phoneNumber);
+      const conversation = await this.getOrCreateConversation(userId, phoneNumber, undefined, channel);
 
       if (!conversation) {
         throw new Error(`Failed to get or create conversation - conversation is null`);
@@ -291,6 +317,7 @@ export class ConversationService {
         throw new Error(`Failed to get or create conversation - conversation has no ID`);
       }
 
+      console.log(`   ✅ Got conversation: ${conversation.id}`);
       logger.info(`Creating outgoing message for conversation ${conversation.id}`);
 
       // Validate conversationId before creating message
@@ -302,13 +329,15 @@ export class ConversationService {
         conversationId: conversation.id,
         whatsappMessageId,
         direction: MessageDirection.OUTBOUND,
-        content,
+        content,  // ⚠️ THIS is the content being saved
         messageType,
+        channel,
         status: whatsappMessageId ? MessageStatus.SENT : MessageStatus.SENT,
         metadata,
         sentAt: new Date(),
       });
 
+      console.log(`   📝 Message object created`);
       logger.info(`Message object created with conversationId: ${message.conversationId}, saving to database...`);
 
       // Ensure conversationId is set before saving
@@ -321,15 +350,22 @@ export class ConversationService {
         conversationId: conversation.id,
         whatsappMessageId,
         direction: MessageDirection.OUTBOUND,
-        content,
+        content,  // ⚠️ THIS is what gets saved to DB
         messageType,
+        channel,
         status: whatsappMessageId ? MessageStatus.SENT : MessageStatus.SENT,
         metadata,
         sentAt: new Date(),
       };
 
+      console.log(`   💾 Saving to database...`);
+      console.log(`   💾 Final content to DB:\n   ${'-'.repeat(70)}\n   ${messageData.content}\n   ${'-'.repeat(70)}`);
+
       logger.info(`Saving message with conversationId: ${messageData.conversationId}`);
       const savedMessage = await this.messageRepository.save(messageData);
+
+      console.log(`   ✅ Message saved with ID: ${savedMessage.id}`);
+      console.log(`   ✅ Saved content:\n   ${'-'.repeat(70)}\n   ${savedMessage.content}\n   ${'-'.repeat(70)}`);
 
       logger.info(`Message saved successfully with ID: ${savedMessage.id}, conversationId: ${savedMessage.conversationId}`);
 
@@ -359,6 +395,7 @@ export class ConversationService {
 
       return savedMessage;
     } catch (error: any) {
+      console.log(`   ❌ Error storing message:`, error.message);
       logger.error('Error storing outgoing message:', {
         error: error.message,
         stack: error.stack,
@@ -548,7 +585,7 @@ export class ConversationService {
    * Get all conversations for a user
    * Returns conversations with all associated events (via invitations)
    */
-  async getUserConversations(userId: string, eventId?: string): Promise<any[]> {
+  async getUserConversations(userId: string, eventId?: string, channel?: 'WHATSAPP' | 'SMS'): Promise<any[]> {
     try {
       const queryBuilder = this.conversationRepository
         .createQueryBuilder('conversation')
@@ -578,6 +615,11 @@ export class ConversationService {
           // No invitations for this event, so only check conversation.eventId
           queryBuilder.andWhere('conversation.eventId = :eventId', { eventId });
         }
+      }
+
+      // Filter by channel if provided
+      if (channel) {
+        queryBuilder.andWhere('conversation.channel = :channel', { channel });
       }
 
       const conversations = await queryBuilder

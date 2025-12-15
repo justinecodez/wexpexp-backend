@@ -15,14 +15,18 @@ export class MessagingController {
   async sendSMS(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { to, message, from } = req.body;
+      const userId = (req as any).user?.userId;
 
       if (!to || !message) {
         throw new AppError('Phone number and message are required', 400, 'MISSING_REQUIRED_FIELDS');
       }
 
+      logger.info(`Sending SMS from user ${userId} to ${JSON.stringify(to)}`);
+
       const results = await communicationService.sendSMS({
         to: Array.isArray(to) ? to : [to],
-        message
+        message,
+        userId
       });
 
       res.status(200).json({
@@ -42,19 +46,20 @@ export class MessagingController {
   async sendBulkSMS(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { recipients, message, from } = req.body;
+      const userId = (req as any).user?.userId;
 
       if (!recipients || !Array.isArray(recipients) || !message) {
         throw new AppError('Recipients array and message are required', 400, 'MISSING_REQUIRED_FIELDS');
       }
 
-      const smsService = getDefaultSMSService();
-      const messages = recipients.map(phone => ({
-        to: [phone],
-        text: message,
-        from
-      }));
+      logger.info(`Sending bulk SMS from user ${userId} to ${recipients.length} recipients`);
 
-      const results = await smsService.sendBulkSMS(messages);
+      // Use the communicationService which supports chat storage
+      const results = await communicationService.sendSMS({
+        to: recipients,
+        message,
+        userId
+      });
 
       res.status(200).json({
         success: true,

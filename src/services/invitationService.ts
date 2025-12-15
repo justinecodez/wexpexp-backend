@@ -106,6 +106,9 @@ export class InvitationService {
     const qrCode = this.generateQRCode();
     const qrCodeDataUrl = await QRCode.toDataURL(qrCode);
 
+    // Generate unique check-in code
+    const checkInCode = await this.generateCheckInCode();
+
     // Create invitation
     const invitation = this.invitationRepository.create({
       eventId,
@@ -114,6 +117,8 @@ export class InvitationService {
       guestPhone: formattedPhone,
       invitationMethod: invitationMethod as any,
       qrCode,
+      qrCodeUrl: qrCodeDataUrl, // Save QR code image data URL
+      checkInCode, // Add 6-digit check-in code
       specialRequirements,
       deliveryStatus: DeliveryStatus.PENDING,
       rsvpStatus: RSVPStatus.PENDING,
@@ -121,8 +126,8 @@ export class InvitationService {
 
     const savedInvitation = await this.invitationRepository.save(invitation);
 
-    // Send invitation
-    await this.sendInvitation(savedInvitation.id, event.title, event.eventDate);
+    // Auto-send disabled - users must manually send invitations via Communications tab
+    // await this.sendInvitation(savedInvitation.id, event.title, event.eventDate);
 
     logger.info(`Invitation created: ${savedInvitation.id} for event: ${eventId}`);
 
@@ -491,24 +496,94 @@ export class InvitationService {
       throw new AppError('Invalid QR code', 404, 'INVALID_QR_CODE');
     }
 
-    if (invitation.rsvpStatus !== 'ACCEPTED') {
-      throw new AppError('Guest has not confirmed attendance', 400, 'RSVP_NOT_CONFIRMED');
-    }
+    // Allow check-in regardless of RSVP status
+    // This enables admins to manually check in walk-in guests or guests who didn't RSVP
 
     if (invitation.checkInTime) {
       throw new AppError('Guest has already checked in', 400, 'ALREADY_CHECKED_IN');
     }
 
 
+
     // Manual check-in is allowed at any time (no date restriction)
     // This allows event organizers to check in guests regardless of event date
 
+    // Update check-in time and auto-accept RSVP if not already accepted
+    const updatedInvitation = await database
+      .getEntityManager()
+      .transaction(async transactionalEntityManager => {
+        // If guest hasn't RSVP'd, automatically accept their attendance when checking in
+        const wasAccepted = invitation.rsvpStatus === 'ACCEPTED';
 
-    // Update check-in time
-    invitation.checkInTime = new Date();
-    const updatedInvitation = await this.invitationRepository.save(invitation);
+        invitation.checkInTime = new Date();
+
+        if (!wasAccepted) {
+          invitation.rsvpStatus = RSVPStatus.ACCEPTED as any;
+          invitation.rsvpAt = new Date();
+
+          // Update event RSVP count
+          const event = await transactionalEntityManager
+            .getRepository('Event')
+            .findOne({ where: { id: invitation.eventId } });
+
+          if (event) {
+            event.currentRsvpCount = (event.currentRsvpCount || 0) + 1 + (invitation.plusOneCount || 0);
+            await transactionalEntityManager.getRepository('Event').save(event);
+          }
+        }
+
+        return await transactionalEntityManager.getRepository('Invitation').save(invitation);
+      });
 
     logger.info(`Guest checked in: ${invitation.id} - ${invitation.guestName}`);
+
+    return this.formatInvitationResponse(updatedInvitation);
+  }
+
+  /**
+   * Check-in guest using 6-digit check-in code (for non-smartphone users)
+   */
+  async checkInGuestByCode(checkInCode: string): Promise<InvitationResponse> {
+    const invitation = await this.invitationRepository.findOne({
+      where: { checkInCode },
+      relations: ['event'],
+    });
+
+    if (!invitation) {
+      throw new AppError('Invalid check-in code', 404, 'INVALID_CHECK_IN_CODE');
+    }
+
+    if (invitation.checkInTime) {
+      throw new AppError('Guest has already checked in', 400, 'ALREADY_CHECKED_IN');
+    }
+
+    // Update check-in time and auto-accept RSVP if not already accepted
+    const updatedInvitation = await database
+      .getEntityManager()
+      .transaction(async transactionalEntityManager => {
+        const wasAccepted = invitation.rsvpStatus === 'ACCEPTED';
+
+        invitation.checkInTime = new Date();
+
+        if (!wasAccepted) {
+          invitation.rsvpStatus = RSVPStatus.ACCEPTED as any;
+          invitation.rsvpAt = new Date();
+
+          // Update event RSVP count
+          const event = await transactionalEntityManager
+            .getRepository('Event')
+            .findOne({ where: { id: invitation.eventId } });
+
+          if (event) {
+            event.currentRsvpCount = (event.currentRsvpCount || 0) + 1 + (invitation.plusOneCount || 0);
+            await transactionalEntityManager.getRepository('Event').save(event);
+          }
+        }
+
+        return await transactionalEntityManager.getRepository('Invitation').save(invitation);
+      });
+
+    logger.info(`Guest checked in by code: ${invitation.id} - ${invitation.guestName} - Code: ${checkInCode}`);
 
     return this.formatInvitationResponse(updatedInvitation);
   }
@@ -785,6 +860,36 @@ export class InvitationService {
   }
 
   /**
+   * Generate unique 6-digit check-in code
+   */
+  private async generateCheckInCode(): Promise<string> {
+    let code: string;
+    let isUnique = false;
+    let attempts = 0;
+    const MAX_ATTEMPTS = 10;
+
+    while (!isUnique && attempts < MAX_ATTEMPTS) {
+      // Generate random 6-digit number
+      code = Math.floor(100000 + Math.random() * 900000).toString();
+
+      // Check if code already exists
+      const existing = await this.invitationRepository.findOne({
+        where: { checkInCode: code },
+      });
+
+      if (!existing) {
+        isUnique = true;
+        return code;
+      }
+
+      attempts++;
+    }
+
+    // Fallback: if we can't generate after MAX_ATTEMPTS, throw error
+    throw new AppError('Unable to generate unique check-in code', 500, 'CODE_GENERATION_FAILED');
+  }
+
+  /**
    * Get invitation by QR code (for public RSVP page)
    */
   async getInvitationByQR(qrCode: string): Promise<any> {
@@ -1032,12 +1137,43 @@ export class InvitationService {
       rsvpAt: invitation.rsvpAt,
       plusOneCount: invitation.plusOneCount,
       qrCode: invitation.qrCode,
+      checkInCode: invitation.checkInCode,
       checkInTime: invitation.checkInTime,
       specialRequirements: invitation.specialRequirements,
       cardUrl: invitation.cardUrl,
       createdAt: invitation.createdAt,
       updatedAt: invitation.updatedAt,
     };
+  }
+
+  /**
+   * Get invitations by IDs (for selective card regeneration)
+   */
+  async getInvitationsByIds(invitationIds: string[]): Promise<Invitation[]> {
+    if (!invitationIds || invitationIds.length === 0) {
+      return [];
+    }
+
+    return await this.invitationRepository.find({
+      where: { id: In(invitationIds) },
+      select: ['id', 'guestName', 'guestEmail', 'guestPhone', 'cardUrl', 'rsvpStatus', 'qrCode'],
+    });
+  }
+
+  /**
+   * Clear card URLs for invitations (before regeneration)
+   */
+  async clearCardUrls(invitationIds: string[]): Promise<void> {
+    if (!invitationIds || invitationIds.length === 0) {
+      return;
+    }
+
+    await this.invitationRepository.update(
+      { id: In(invitationIds) },
+      { cardUrl: undefined as any } // Set to undefined to clear
+    );
+
+    logger.info(`🧹 Cleared cardUrl for ${invitationIds.length} invitations`);
   }
 }
 
