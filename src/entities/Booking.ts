@@ -89,23 +89,25 @@ export class Booking {
   @JoinColumn({ name: 'user_id' })
   user!: User;
 
-  @ManyToOne(() => Tour, tour => tour.bookings, { nullable: true })
+  // Polymorphic relations - service_id can point to different tables based on serviceType
+  // We disable FK constraints because one column can't have multiple FK references in PostgreSQL
+  @ManyToOne(() => Tour, tour => tour.bookings, { nullable: true, createForeignKeyConstraints: false })
   @JoinColumn({ name: 'service_id' })
   tour!: Tour;
 
-  @ManyToOne(() => Vehicle, vehicle => vehicle.bookings, { nullable: true })
+  @ManyToOne(() => Vehicle, vehicle => vehicle.bookings, { nullable: true, createForeignKeyConstraints: false })
   @JoinColumn({ name: 'service_id' })
   vehicle!: Vehicle;
 
-  @ManyToOne(() => Accommodation, accommodation => accommodation.bookings, { nullable: true })
+  @ManyToOne(() => Accommodation, accommodation => accommodation.bookings, { nullable: true, createForeignKeyConstraints: false })
   @JoinColumn({ name: 'service_id' })
   accommodation!: Accommodation;
 
-  @ManyToOne(() => Venue, venue => venue.bookings, { nullable: true })
+  @ManyToOne(() => Venue, venue => venue.bookings, { nullable: true, createForeignKeyConstraints: false })
   @JoinColumn({ name: 'service_id' })
   venue!: Venue;
 
-  @ManyToOne(() => Decoration, decoration => decoration.bookings, { nullable: true })
+  @ManyToOne(() => Decoration, decoration => decoration.bookings, { nullable: true, createForeignKeyConstraints: false })
   @JoinColumn({ name: 'service_id' })
   decoration!: Decoration;
 }
