@@ -5,23 +5,22 @@ import config from './index';
 import logger from './logger';
 import { entityClasses } from '../entities';
 
-// Database configuration
+// PostgreSQL Database Configuration
 const dataSourceOptions: DataSourceOptions = {
-  type: 'sqlite',
-  database: path.join(process.cwd(), 'database.sqlite'),
-  synchronize: config.nodeEnv === 'development', // Only in development
-  // Disable query logging to reduce log noise, enable only when debugging
+  type: 'postgres',
+  host: process.env.DATABASE_HOST || 'localhost',
+  port: parseInt(process.env.DATABASE_PORT || '5432', 10),
+  username: process.env.DATABASE_USERNAME || 'wexpevents',
+  password: process.env.DATABASE_PASSWORD || 'wexpevents123',
+  database: process.env.DATABASE_NAME || 'wexpevents',
+  synchronize: true, // Auto-create tables (safe for now, disable in production later)
   logging: config.nodeEnv === 'development' ? ['error', 'warn', 'migration'] : false,
-  // Alternative: Use selective logging
-  // logging: config.nodeEnv === 'development' ? ['error', 'warn', 'schema'] : false,
   entities: entityClasses,
   migrations: [path.join(__dirname, '../migrations/*.ts')],
   subscribers: [path.join(__dirname, '../subscribers/*.ts')],
   migrationsTableName: 'typeorm_migrations',
-  // Add query result cache to reduce duplicate queries
-  cache: {
-    duration: 30000, // 30 seconds cache for frequently accessed data
-  },
+  // PostgreSQL specific options
+  ssl: process.env.DATABASE_SSL === 'true' ? { rejectUnauthorized: false } : false,
 };
 
 export const AppDataSource = new DataSource(dataSourceOptions);
@@ -49,12 +48,16 @@ class Database {
     try {
       if (!this.dataSource.isInitialized) {
         await this.dataSource.initialize();
-        logger.info('Successfully connected to SQLite database');
+        logger.info('Successfully connected to PostgreSQL database');
 
         // Run migrations in production
         if (config.nodeEnv === 'production') {
-          await this.dataSource.runMigrations();
-          logger.info('Database migrations completed');
+          try {
+            await this.dataSource.runMigrations();
+            logger.info('Database migrations completed');
+          } catch (migrationError) {
+            logger.warn('Migration warning:', migrationError);
+          }
         }
       }
     } catch (error) {

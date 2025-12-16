@@ -1,5 +1,5 @@
 # WEXP Backend API
-# Connects to shared services-network
+# Connects to shared services-network (PostgreSQL + Redis)
 
 networks:
   services-network:
@@ -17,6 +17,13 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3001
+      # PostgreSQL connection
+      - DATABASE_HOST=shared-postgres
+      - DATABASE_PORT=5432
+      - DATABASE_USERNAME=wexpevents
+      - DATABASE_PASSWORD=wexpevents123
+      - DATABASE_NAME=wexpevents
+      # Redis connection
       - REDIS_URL=redis://shared-redis:6379
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -25,6 +32,11 @@ services:
       - ./logs:/app/logs
     networks:
       - services-network
+    depends_on:
+      shared-postgres:
+        condition: service_healthy
+      shared-redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/health"]
       interval: 30s
