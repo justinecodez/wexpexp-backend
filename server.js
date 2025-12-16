@@ -7,8 +7,8 @@ require("reflect-metadata");
 const dotenv_1 = __importDefault(require("dotenv"));
 // Load environment variables first
 dotenv_1.default.config();
-const app_1 = __importDefault(require("./src/app"));
-const logger_1 = __importDefault(require("./src/config/logger"));
+const app_1 = __importDefault(require("./dist/app"));
+const logger_1 = __importDefault(require("./dist/config/logger"));
 async function startServer() {
     try {
         const app = new app_1.default();
