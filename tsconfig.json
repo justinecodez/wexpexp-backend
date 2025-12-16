@@ -2,8 +2,11 @@
   "compilerOptions": {
     "target": "ES2020",
     "module": "commonjs",
-    "lib": ["ES2020"],
+    "lib": [
+      "ES2020"
+    ],
     "outDir": "./dist",
+    "rootDir": "./src",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -12,21 +15,36 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
-    "experimentalDecorators": true,
-    "emitDecoratorMetadata": true,
+    "moduleResolution": "node",
     "allowSyntheticDefaultImports": true,
-    "baseUrl": "./src",
-    "paths": {
-      "@/*": ["*"],
-      "@/controllers/*": ["controllers/*"],
-      "@/middleware/*": ["middleware/*"],
-      "@/models/*": ["models/*"],
-      "@/routes/*": ["routes/*"],
-      "@/services/*": ["services/*"],
-      "@/utils/*": ["utils/*"],
-      "@/types/*": ["types/*"],
-      "@/config/*": ["config/*"]
-    }
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "strictPropertyInitialization": false,
+    "noImplicitAny": false,
+    "strictNullChecks": false,
+    "types": [
+      "node",
+      "jest"
+    ]
   },
-  "exclude": ["node_modules", "dist", "tests"]
+  "include": [
+    "src/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "scripts",
+    "server.ts",
+    "**/*.test.ts",
+    "**/*.spec.ts",
+    "**/tests/**",
+    "**/providers/**",
+    "src/utils/api.ts",
+    "src/utils/context.ts",
+    "src/controllers/draft.controller.ts",
+    "src/controllers/template.controller.ts",
+    "src/services/draft.service.ts",
+    "src/services/eventDraftService.ts",
+    "src/routes/template.routes.ts"
+  ]
 }

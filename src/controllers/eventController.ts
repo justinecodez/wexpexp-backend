@@ -434,7 +434,7 @@ export class EventController {
           name: guest.guestName,
           email: guest.guestEmail,
           phone: guest.guestPhone,
-          date: event.startDate, // Assuming event has startDate
+          date: event.eventDate, // Event date
           venue: event.venueName, // Assuming event has venueName
           city: event.venueCity,
         },

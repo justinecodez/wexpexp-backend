@@ -1,14 +1,14 @@
 import { Request, Response } from 'express';
 import { emailService } from '../services/emailService';
-import { 
-    getWelcomeEmailTemplate, 
-    getPasswordResetTemplate, 
-    getEventConfirmationTemplate, 
+import {
+    getWelcomeEmailTemplate,
+    getPasswordResetTemplate,
+    getEventConfirmationTemplate,
     getBookingConfirmationTemplate,
     getTestEmailTemplate,
     EmailTemplateData
 } from '../utils/emailTemplates';
-import { logger } from '../config/logger';
+import logger from '../config/logger';
 
 /**
  * Test email configuration by sending a test email
@@ -16,7 +16,7 @@ import { logger } from '../config/logger';
 export const testEmailConfiguration = async (req: Request, res: Response): Promise<void> => {
     try {
         const { to } = req.body;
-        
+
         if (!to || !to.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
             res.status(400).json({
                 success: false,
@@ -79,7 +79,7 @@ export const testEmailConfiguration = async (req: Request, res: Response): Promi
 export const sendWelcomeEmail = async (req: Request, res: Response): Promise<void> => {
     try {
         const { to, userName } = req.body;
-        
+
         if (!to || !userName) {
             res.status(400).json({
                 success: false,
@@ -123,7 +123,7 @@ export const sendWelcomeEmail = async (req: Request, res: Response): Promise<voi
 export const verifyEmailConnection = async (req: Request, res: Response): Promise<void> => {
     try {
         const isConnected = await emailService.verifyConnection();
-        
+
         if (isConnected) {
             res.status(200).json({
                 success: true,
@@ -155,7 +155,7 @@ export const verifyEmailConnection = async (req: Request, res: Response): Promis
         res.status(500).json({
             success: false,
             message: 'Internal server error',
-            error: error.message
+            error: (error as Error).message
         });
     }
 };
@@ -167,7 +167,7 @@ export const getEmailServiceStatus = async (req: Request, res: Response): Promis
     try {
         const isEnabled = process.env.EMAIL_ENABLED !== 'false';
         const hasCredentials = !!(process.env.SMTP_USER && process.env.SMTP_PASS);
-        
+
         res.status(200).json({
             success: true,
             status: {

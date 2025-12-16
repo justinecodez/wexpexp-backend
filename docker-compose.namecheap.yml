@@ -1,0 +1,64 @@
+version: '3.8'
+
+# Docker Compose for Namecheap Deployment
+# This version uses Namecheap's managed PostgreSQL instead of a container
+
+services:
+  # WEXP API Service
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+    env_file:
+      - .env
+    volumes:
+      - ./uploads:/app/uploads
+      - ./logs:/app/logs
+    network_mode: host  # Required to connect to localhost PostgreSQL
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:3000/health']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '10m'
+        max-file: '3'
+
+  # Redis for caching and sessions
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-wexp_redis_2024}
+    ports:
+      - '127.0.0.1:6379:6379'
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '5m'
+        max-file: '2'
+
+volumes:
+  redis_data:
+    driver: local
+
+# Notes:
+# - PostgreSQL is managed by Namecheap, not in a container
+# - DATABASE_URL in .env should use: localhost:5432
+# - network_mode: host allows connection to host's PostgreSQL
+# - Make sure PostgreSQL credentials in .env match Namecheap setup
