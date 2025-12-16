@@ -2,8 +2,8 @@ import 'reflect-metadata';
 import dotenv from "dotenv"
 // Load environment variables first
 dotenv.config();
-import App from './src/app';
-import logger from './src/config/logger';
+import App from './app';
+import logger from './config/logger';
 async function startServer() {
   try {
     const app = new App();
