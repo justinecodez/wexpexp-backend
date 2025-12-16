@@ -83,9 +83,14 @@ class Database {
             logger.warn('Migration warning:', migrationError);
           }
         }
+
+        // Service test - verify database is responding
+        await this.runServiceTest();
       }
-    } catch (error) {
-      logger.error('Failed to connect to database:', error);
+    } catch (error: any) {
+      logger.error('Failed to connect to database:');
+      logger.error('Error message:', error?.message || error);
+      logger.error('Error stack:', error?.stack);
       throw error;
     }
   }
@@ -98,6 +103,24 @@ class Database {
       }
     } catch (error) {
       logger.error('Error disconnecting from database:', error);
+      throw error;
+    }
+  }
+
+  private async runServiceTest(): Promise<void> {
+    try {
+      // Run a simple test query
+      const result = await this.dataSource.query('SELECT 1 as test');
+      logger.info('✅ Database service test PASSED');
+      logger.info(`   - Database type: ${this.dataSource.options.type}`);
+      if (this.dataSource.options.type === 'postgres') {
+        const opts = this.dataSource.options as any;
+        logger.info(`   - Host: ${opts.host}:${opts.port}`);
+        logger.info(`   - Database: ${opts.database}`);
+      }
+      logger.info(`   - Query result: ${JSON.stringify(result)}`);
+    } catch (error: any) {
+      logger.error('❌ Database service test FAILED:', error?.message);
       throw error;
     }
   }
