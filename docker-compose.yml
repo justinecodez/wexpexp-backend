@@ -1,11 +1,40 @@
-# WEXP Backend API
-# Connects to shared services-network (PostgreSQL + Redis)
+# WEXP Backend API + PostgreSQL Database
+# Connects to shared services-network (Redis)
 
 networks:
   services-network:
     external: true
 
 services:
+  # WEXP PostgreSQL Database
+  wexp-postgres:
+    image: postgres:15-alpine
+    container_name: wexp-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: wexpevents
+      POSTGRES_PASSWORD: wexpevents123
+      POSTGRES_DB: wexpevents
+    volumes:
+      - wexp-postgres-data:/var/lib/postgresql/data
+    networks:
+      - services-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wexpevents -d wexpevents"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # WEXP Backend API
   wexp-backend:
     build:
       context: .
@@ -18,7 +47,7 @@ services:
       - NODE_ENV=production
       - PORT=3001
       # PostgreSQL connection
-      - DATABASE_HOST=shared-postgres
+      - DATABASE_HOST=wexp-postgres
       - DATABASE_PORT=5432
       - DATABASE_USERNAME=wexpevents
       - DATABASE_PASSWORD=wexpevents123
@@ -33,9 +62,7 @@ services:
     networks:
       - services-network
     depends_on:
-      shared-postgres:
-        condition: service_healthy
-      shared-redis:
+      wexp-postgres:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/health"]
@@ -52,3 +79,6 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+
+volumes:
+  wexp-postgres-data:
