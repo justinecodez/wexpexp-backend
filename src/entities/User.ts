@@ -45,7 +45,7 @@ export class User {
   @Column({ type: 'boolean', name: 'is_verified', default: false })
   isVerified!: boolean;
 
-  @Column({ type: 'datetime', name: 'email_verified_at', nullable: true })
+  @Column({ type: 'timestamp', name: 'email_verified_at', nullable: true })
   emailVerifiedAt!: Date | null;
 
   @Column({ type: 'varchar', name: 'profile_image', nullable: true })
@@ -68,13 +68,13 @@ export class User {
   @Column({ type: 'varchar', name: 'reset_token', nullable: true })
   resetToken!: string | null;
 
-  @Column({ type: 'datetime', name: 'reset_token_expiry', nullable: true })
+  @Column({ type: 'timestamp', name: 'reset_token_expiry', nullable: true })
   resetTokenExpiry!: Date | null;
 
   @Column({ type: 'varchar', name: 'email_verification_token', nullable: true })
   emailVerificationToken!: string | null;
 
-  @Column({ type: 'datetime', name: 'email_verification_token_expiry', nullable: true })
+  @Column({ type: 'timestamp', name: 'email_verification_token_expiry', nullable: true })
   emailVerificationTokenExpiry!: Date | null;
 
   @CreateDateColumn({ name: 'created_at' })
