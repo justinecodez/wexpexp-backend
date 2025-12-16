@@ -5,23 +5,46 @@ import config from './index';
 import logger from './logger';
 import { entityClasses } from '../entities';
 
-// PostgreSQL Database Configuration
-const dataSourceOptions: DataSourceOptions = {
-  type: 'postgres',
-  host: process.env.DATABASE_HOST || 'localhost',
-  port: parseInt(process.env.DATABASE_PORT || '5432', 10),
-  username: process.env.DATABASE_USERNAME || 'wexpevents',
-  password: process.env.DATABASE_PASSWORD || 'wexpevents123',
-  database: process.env.DATABASE_NAME || 'wexpevents',
-  synchronize: true, // Auto-create tables (safe for now, disable in production later)
-  logging: config.nodeEnv === 'development' ? ['error', 'warn', 'migration'] : false,
-  entities: entityClasses,
-  migrations: [path.join(__dirname, '../migrations/*.ts')],
-  subscribers: [path.join(__dirname, '../subscribers/*.ts')],
-  migrationsTableName: 'typeorm_migrations',
-  // PostgreSQL specific options
-  ssl: process.env.DATABASE_SSL === 'true' ? { rejectUnauthorized: false } : false,
+// Get database configuration based on environment
+const getDatabaseConfig = (): DataSourceOptions => {
+  // Use SQLite for local development
+  if (config.nodeEnv === 'development') {
+    logger.info('Using SQLite database for development');
+    return {
+      type: 'sqlite',
+      database: path.join(process.cwd(), 'database.sqlite'),
+      synchronize: true,
+      logging: ['error', 'warn', 'migration'],
+      entities: entityClasses,
+      migrations: [path.join(__dirname, '../migrations/*.ts')],
+      subscribers: [path.join(__dirname, '../subscribers/*.ts')],
+      migrationsTableName: 'typeorm_migrations',
+      cache: {
+        duration: 30000,
+      },
+    };
+  }
+
+  // Use PostgreSQL for production
+  logger.info('Using PostgreSQL database for production');
+  return {
+    type: 'postgres',
+    host: process.env.DATABASE_HOST || 'shared-postgres',
+    port: parseInt(process.env.DATABASE_PORT || '5432', 10),
+    username: process.env.DATABASE_USERNAME || 'wexpevents',
+    password: process.env.DATABASE_PASSWORD || 'wexpevents123',
+    database: process.env.DATABASE_NAME || 'wexpevents',
+    synchronize: true, // Auto-create tables
+    logging: ['error', 'warn'],
+    entities: entityClasses,
+    migrations: [path.join(__dirname, '../migrations/*.ts')],
+    subscribers: [path.join(__dirname, '../subscribers/*.ts')],
+    migrationsTableName: 'typeorm_migrations',
+    ssl: process.env.DATABASE_SSL === 'true' ? { rejectUnauthorized: false } : false,
+  };
 };
+
+const dataSourceOptions = getDatabaseConfig();
 
 export const AppDataSource = new DataSource(dataSourceOptions);
 
@@ -48,7 +71,8 @@ class Database {
     try {
       if (!this.dataSource.isInitialized) {
         await this.dataSource.initialize();
-        logger.info('Successfully connected to PostgreSQL database');
+        const dbType = config.nodeEnv === 'development' ? 'SQLite' : 'PostgreSQL';
+        logger.info(`Successfully connected to ${dbType} database`);
 
         // Run migrations in production
         if (config.nodeEnv === 'production') {
@@ -84,7 +108,6 @@ class Database {
         return false;
       }
 
-      // Simple query to check connection
       await this.dataSource.query('SELECT 1');
       return true;
     } catch (error) {
@@ -93,12 +116,10 @@ class Database {
     }
   }
 
-  // Helper method to get repository
   public getRepository<T>(entity: new () => T) {
     return this.dataSource.getRepository(entity);
   }
 
-  // Helper method to get entity manager
   public getEntityManager() {
     return this.dataSource.manager;
   }
@@ -106,6 +127,5 @@ class Database {
 
 export default Database.getInstance();
 
-// Export commonly used items
 export const database = Database.getInstance();
 export { AppDataSource as dataSource };
