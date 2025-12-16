@@ -1,27 +1,18 @@
-FROM node:18-alpine
-
+# Stage 1: Build
+FROM node:20-alpine as builder
 WORKDIR /app
-
-# Create main logs directory 
-RUN mkdir -p /app/logs && chmod -R 777 /app/logs
-
-# Copy dependency files
 COPY package*.json ./  
 COPY package-lock.json ./ 
-
-# Install dependencies
-RUN npm install 
-
-# RUN yarn add mssql
-
-# Copy all source code
 COPY . .
-
-# Build TypeScript files
+RUN npm install
 RUN npm run build
 
-# Expose port
-EXPOSE 3001
+# Stage 2: Run
+FROM node:20-alpine
+WORKDIR /app
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/server.js ./server.js
 
-# Start the server
+EXPOSE 3001
 CMD ["node", "server.js"]
