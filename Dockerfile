@@ -18,4 +18,10 @@ RUN npm install
 COPY . .
 
 # Build TypeScript files
-RUN npm run build  
+RUN npm run build
+
+# Expose port
+EXPOSE 3001
+
+# Start the server
+CMD ["node", "dist/server.js"]  

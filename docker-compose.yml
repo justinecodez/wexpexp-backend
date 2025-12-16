@@ -1,10 +1,8 @@
-version: '3.8'
-
 # WEXP Backend API
-# Connects to shared wexp-network (created by deployment/docker-compose.yml)
+# Connects to shared services-network
 
 networks:
-  wexp-network:
+  services-network:
     external: true
 
 services:
@@ -19,14 +17,14 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3001
-      - REDIS_URL=redis://wexp-redis:6379
+      - REDIS_URL=redis://shared-redis:6379
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
       - ./uploads:/app/uploads
       - ./logs:/app/logs
     networks:
-      - wexp-network
+      - services-network
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/health"]
       interval: 30s
