@@ -254,6 +254,80 @@ export class InvitationController {
   );
 
   /**
+   * Import guests from Excel
+   */
+  importGuestsFromExcel = catchAsync(
+    async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+      if (!req.user) {
+        return res.status(401).json({
+          success: false,
+          error: 'Not authenticated',
+        });
+      }
+
+      if (!req.file) {
+        return res.status(400).json({
+          success: false,
+          error: 'Excel file is required',
+        });
+      }
+
+      const { eventId } = req.body as { eventId: string };
+      if (!eventId) {
+        return res.status(400).json({
+          success: false,
+          error: 'Event ID is required',
+        });
+      }
+
+      const result = await invitationService.importGuestsFromExcel(
+        eventId,
+        req.user.userId,
+        req.file.path
+      );
+
+      const response: ApiResponse = {
+        success: true,
+        message: `Excel import completed: ${result.successful.length} successful, ${result.failed.length} failed`,
+        data: result,
+      };
+
+      res.status(200).json(response);
+    }
+  );
+
+  /**
+   * Download guest list template
+   */
+  downloadGuestTemplate = catchAsync(
+    async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+      if (!req.user) {
+        return res.status(401).json({
+          success: false,
+          error: 'Not authenticated',
+        });
+      }
+
+      const fileName = await invitationService.generateGuestTemplate();
+      const filePath = path.join(process.cwd(), 'uploads', 'temp', fileName);
+
+      // Set headers for file download
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="wexp_guest_template.xlsx"`);
+
+      // Send file
+      res.sendFile(filePath, err => {
+        if (err) {
+          res.status(500).json({
+            success: false,
+            error: 'Failed to download template',
+          });
+        }
+      });
+    }
+  );
+
+  /**
    * Export guest list to CSV
    */
   exportGuestListToCSV = catchAsync(

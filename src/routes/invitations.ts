@@ -139,8 +139,28 @@ router.delete('/:id',
  */
 router.post('/import-csv',
   authenticate,
-  uploadCSV.single('file'),
   invitationController.importGuestsFromCSV
+);
+
+/**
+ * @route   POST /api/invitations/import-excel
+ * @desc    Import guests from Excel file
+ * @access  Private
+ */
+router.post('/import-excel',
+  authenticate,
+  require('../utils/fileUpload').uploadExcel.single('file'),
+  invitationController.importGuestsFromExcel
+);
+
+/**
+ * @route   GET /api/invitations/template
+ * @desc    Download guest list template
+ * @access  Private
+ */
+router.get('/template',
+  authenticate,
+  invitationController.downloadGuestTemplate
 );
 
 /**

@@ -24,6 +24,7 @@ import fs from 'fs';
 import path from 'path';
 
 import { storageService } from './storageService';
+import * as XLSX from 'xlsx';
 
 export class InvitationService {
   private invitationRepository: Repository<Invitation>;
@@ -702,6 +703,141 @@ export class InvitationService {
           reject(error);
         });
     });
+  }
+
+  /**
+   * Import guests from Excel
+   */
+  async importGuestsFromExcel(
+    eventId: string,
+    userId: string,
+    filePath: string
+  ): Promise<{
+    successful: InvitationResponse[];
+    failed: Array<{ row: any; error: string }>;
+  }> {
+    // Verify event ownership
+    const event = await this.eventRepository.findOne({
+      where: { id: eventId },
+      select: ['userId'],
+    });
+
+    if (!event) {
+      throw new AppError('Event not found', 404, 'EVENT_NOT_FOUND');
+    }
+
+    if (event.userId !== userId) {
+      throw new AppError('Access denied to this event', 403, 'EVENT_ACCESS_DENIED');
+    }
+
+    try {
+      const workbook = XLSX.readFile(filePath);
+      const sheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[sheetName];
+      const guests = XLSX.utils.sheet_to_json(sheet);
+
+      const successful: InvitationResponse[] = [];
+      const failed: Array<{ row: any; error: string }> = [];
+
+      for (const guest of guests as any[]) {
+        try {
+          // Map Excel columns to invitation data (with fallback names)
+          const guestName = guest.name || guest.guestName || guest['Guest Name'] || guest['Name'];
+          const guestEmail = guest.email || guest.guestEmail || guest['Email'];
+          const guestPhoneRaw = guest.phone || guest.guestPhone || guest['Phone'];
+          const methodRaw = guest.method || guest.invitationMethod || guest['Invitation Method'] || 'EMAIL';
+          const specialRequirements = guest.requirements || guest.specialRequirements || guest['Special Requirements'] || guest['Note'];
+
+          if (!guestName) {
+            throw new Error('Guest name is required');
+          }
+
+          // Normalize phone number
+          let formattedPhone = guestPhoneRaw ? String(guestPhoneRaw).replace(/[^\d+]/g, '') : '';
+          if (formattedPhone.startsWith('+')) formattedPhone = formattedPhone.substring(1);
+          if (formattedPhone.startsWith('0')) formattedPhone = '255' + formattedPhone.substring(1);
+          if (formattedPhone.length === 9) formattedPhone = '255' + formattedPhone;
+
+          const invitationData: CreateInvitationRequest = {
+            eventId,
+            guestName: String(guestName).trim(),
+            guestEmail: guestEmail ? String(guestEmail).trim().toLowerCase() : undefined,
+            guestPhone: formattedPhone || undefined,
+            invitationMethod: methodRaw.toString().toUpperCase() as any,
+            specialRequirements: specialRequirements ? String(specialRequirements).trim() : undefined,
+          };
+
+          const invitation = await this.createInvitation(userId, invitationData);
+          successful.push(invitation);
+        } catch (error) {
+          failed.push({
+            row: guest,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          });
+        }
+      }
+
+      // Clean up temporary file
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+
+      logger.info(
+        `Excel import completed: ${successful.length} successful, ${failed.length} failed`
+      );
+
+      return { successful, failed };
+    } catch (error) {
+      logger.error('Error parsing Excel file', { error });
+      throw new AppError('Failed to parse Excel file', 400, 'EXCEL_PARSE_ERROR');
+    }
+  }
+
+  /**
+   * Generate guest list Excel template
+   */
+  async generateGuestTemplate(): Promise<string> {
+    const fileName = `wexp_guest_import_template_${Date.now()}.xlsx`;
+    const filePath = path.join(process.cwd(), 'uploads', 'temp', fileName);
+
+    // Create a new workbook
+    const wb = XLSX.utils.book_new();
+
+    // Sample data for the template
+    const templateData = [
+      {
+        'Guest Name': 'John Doe',
+        'Email': 'john@example.com',
+        'Phone': '255700000000',
+        'Invitation Method': 'EMAIL',
+        'Special Requirements': 'Vegetarian'
+      },
+      {
+        'Guest Name': 'Jane Doe',
+        'Email': 'jane@example.com',
+        'Phone': '255711111111',
+        'Invitation Method': 'WHATSAPP',
+        'Special Requirements': 'Needs parking space'
+      }
+    ];
+
+    const ws = XLSX.utils.json_to_sheet(templateData);
+
+    // Add columns widths for better visibility
+    ws['!cols'] = [
+      { wch: 25 }, // Name
+      { wch: 25 }, // Email
+      { wch: 15 }, // Phone
+      { wch: 20 }, // Method
+      { wch: 30 }  // Requirements
+    ];
+
+    XLSX.utils.book_append_sheet(wb, ws, 'Guests');
+
+    // Write the file
+    XLSX.writeFile(wb, filePath);
+
+    return fileName;
   }
 
   /**

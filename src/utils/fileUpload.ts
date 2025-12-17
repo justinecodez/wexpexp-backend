@@ -138,6 +138,15 @@ export const uploadCSV = multer({
   fileFilter: fileFilter(FILE_TYPES.CSV),
 });
 
+// Excel upload for guest lists
+export const uploadExcel = multer({
+  storage: createStorage('temp'),
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB
+  },
+  fileFilter: fileFilter(FILE_TYPES.SPREADSHEETS),
+});
+
 // General document upload
 export const uploadDocuments = multer({
   storage: createStorage('temp'),
@@ -235,6 +244,7 @@ export default {
   uploadServiceImages,
   uploadLandingAssets,
   uploadCSV,
+  uploadExcel,
   uploadDocuments,
   getFileUrl,
   deleteFile,

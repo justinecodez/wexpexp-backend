@@ -209,10 +209,26 @@ export class CampaignController {
                 return;
             }
 
-            // Validate phone number
-            const cleanPhone = phone.replace(/[\s-]/g, '');
+            // Improved phone normalization
+            let cleanPhone = phone.replace(/[^\d+]/g, ''); // Remove anything not a digit or +
+
+            // Handle + prefix
+            if (cleanPhone.startsWith('+')) {
+                cleanPhone = cleanPhone.substring(1);
+            }
+
+            // Handle leading 0 (replace with 255)
+            if (cleanPhone.startsWith('0')) {
+                cleanPhone = '255' + cleanPhone.substring(1);
+            }
+
+            // Add 255 if clearly missing for TZ numbers (9 digits)
+            if (cleanPhone.length === 9) {
+                cleanPhone = '255' + cleanPhone;
+            }
+
             if (!/^255\d{9}$/.test(cleanPhone)) {
-                res.status(400).json({ message: 'Invalid phone number format. Expected: 255XXXXXXXXX' });
+                res.status(400).json({ message: `Invalid phone number format: ${phone}. Expected: 255XXXXXXXXX or +255... or 0...` });
                 return;
             }
 
@@ -285,6 +301,48 @@ export class CampaignController {
         } catch (error) {
             logger.error('Error importing recipients', { error });
             res.status(500).json({ message: 'Failed to import recipients' });
+        }
+    }
+
+    /**
+     * Update an individual recipient
+     */
+    async updateRecipient(req: Request, res: Response): Promise<void> {
+        try {
+            const { id, recipientId } = req.params;
+            const { name, phone } = req.body;
+            const recipientRepo = AppDataSource.getRepository(CampaignRecipient);
+
+            const recipient = await recipientRepo.findOne({
+                where: { id: recipientId, campaign: { id } },
+            });
+
+            if (!recipient) {
+                res.status(404).json({ message: 'Recipient not found' });
+                return;
+            }
+
+            if (name !== undefined) recipient.name = name;
+
+            if (phone !== undefined) {
+                // Improved phone normalization
+                let cleanPhone = phone.replace(/[^\d+]/g, '');
+                if (cleanPhone.startsWith('+')) cleanPhone = cleanPhone.substring(1);
+                if (cleanPhone.startsWith('0')) cleanPhone = '255' + cleanPhone.substring(1);
+                if (cleanPhone.length === 9) cleanPhone = '255' + cleanPhone;
+
+                if (!/^255\d{9}$/.test(cleanPhone)) {
+                    res.status(400).json({ message: 'Invalid phone number format' });
+                    return;
+                }
+                recipient.phone = cleanPhone;
+            }
+
+            await recipientRepo.save(recipient);
+            res.json(recipient);
+        } catch (error) {
+            logger.error('Error updating recipient', { error });
+            res.status(500).json({ message: 'Failed to update recipient' });
         }
     }
 

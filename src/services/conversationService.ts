@@ -443,7 +443,18 @@ export class ConversationService {
         throw new Error(`Failed to get or create conversation`);
       }
 
-      const content = `[Template: ${templateName}]`;
+      // Render actual template content instead of placeholder
+      let content = `[Template: ${templateName}]`;
+      try {
+        const { renderWhatsAppTemplate } = await import('../utils/whatsappTemplates');
+        content = renderWhatsAppTemplate(
+          templateName,
+          languageCode,
+          metadata?.components || []
+        );
+      } catch (renderError) {
+        logger.warn(`Failed to render template ${templateName}, using placeholder`, renderError);
+      }
 
       const messageData = {
         conversationId: conversation.id,

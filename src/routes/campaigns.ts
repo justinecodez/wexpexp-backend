@@ -62,6 +62,15 @@ router.post('/:id/recipients/import', upload.single('file'), (req, res) =>
 );
 
 /**
+ * @route   PUT /api/campaigns/:id/recipients/:recipientId
+ * @desc    Update individual recipient
+ * @access  Private
+ */
+router.put('/:id/recipients/:recipientId', (req, res) =>
+    campaignController.updateRecipient(req, res)
+);
+
+/**
  * @route   DELETE /api/campaigns/:id/recipients/:recipientId
  * @desc    Remove recipient from campaign
  * @access  Private
