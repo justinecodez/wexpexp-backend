@@ -119,6 +119,17 @@ interface Config {
     email: string;
     password: string;
   };
+
+  // WhatsApp Flows
+  flows: {
+    privateKey: string;
+    flowId: string;
+  };
+
+  // Meta (Facebook)
+  meta: {
+    appSecret: string;
+  };
 }
 
 const config: Config = {
@@ -239,8 +250,19 @@ const config: Config = {
 
   // Admin
   admin: {
-    email: process.env.ADMIN_EMAIL || 'admin@tanzaniaevents.com',
-    password: process.env.ADMIN_PASSWORD || 'SecurePassword123!',
+    email: process.env.ADMIN_EMAIL || 'admin@wexpevents.co.tz',
+    password: process.env.ADMIN_PASSWORD || 'change-me-in-production',
+  },
+
+  // WhatsApp Flows
+  flows: {
+    privateKey: process.env.FLOWS_PRIVATE_KEY || '',
+    flowId: process.env.WHATSAPP_FLOW_ID || '',
+  },
+
+  // Meta (Facebook)
+  meta: {
+    appSecret: process.env.META_APP_SECRET || '',
   },
 };
 

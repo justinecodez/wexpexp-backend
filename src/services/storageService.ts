@@ -1,71 +1,51 @@
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
-import config from '../config';
+import { PutObjectCommand } from '@aws-sdk/client-s3';
+import s3Client, { s3Config } from '../config/s3.config';
 import logger from '../config/logger';
 
 class StorageService {
-    private s3Client: S3Client | null = null;
-    private bucketName: string = '';
-
-    constructor() {
-        if (config.backblaze) {
-            this.s3Client = new S3Client({
-                endpoint: config.backblaze.endpoint.startsWith('http')
-                    ? config.backblaze.endpoint
-                    : `https://${config.backblaze.endpoint}`,
-                region: 'us-east-1', // Backblaze B2 uses us-east-1 signature version 4
-                credentials: {
-                    accessKeyId: config.backblaze.applicationKeyId,
-                    secretAccessKey: config.backblaze.applicationKey,
-                },
-            });
-            this.bucketName = config.backblaze.bucketName;
-        } else if (config.aws) {
-            this.s3Client = new S3Client({
-                region: config.aws.region,
-                credentials: {
-                    accessKeyId: config.aws.accessKeyId,
-                    secretAccessKey: config.aws.secretAccessKey,
-                },
-            });
-            this.bucketName = config.aws.bucketName;
-        }
-    }
-
+    /**
+     * Upload a file to R2/S3 storage
+     */
     async uploadFile(
         fileBuffer: Buffer,
         fileName: string,
         contentType: string
     ): Promise<string> {
-        if (!this.s3Client) {
-            throw new Error('Storage service is not configured');
+        // Ensure bucket is set
+        if (!s3Config.bucketName) {
+            throw new Error('Storage bucket is not configured (S3_BUCKET_NAME missing)');
         }
 
         try {
             const command = new PutObjectCommand({
-                Bucket: this.bucketName,
+                Bucket: s3Config.bucketName,
                 Key: fileName,
                 Body: fileBuffer,
                 ContentType: contentType,
-                // ACL: 'public-read', // Backblaze B2 buckets are private by default, but we can set public access on the bucket level or use presigned URLs. 
-                // For this use case, we assume the bucket is configured to allow public read or we're generating public URLs.
             });
 
-            await this.s3Client.send(command);
+            await s3Client.send(command);
+            logger.info(`🚀 File uploaded to R2/S3: ${fileName}`);
 
             // Construct public URL
-            if (config.backblaze) {
-                // Backblaze B2 friendly URL format: https://<bucketName>.<endpoint>/<fileName>
-                // OR S3 compatible: https://<endpoint>/<bucketName>/<fileName>
-                // Let's use the S3 compatible format which is safer
-                const endpoint = config.backblaze.endpoint.startsWith('http')
-                    ? config.backblaze.endpoint
-                    : `https://${config.backblaze.endpoint}`;
+            // Prioritize S3_PUBLIC_URL_BASE if defined (preferred for R2 custom domains)
+            const publicBaseUrl = process.env.S3_PUBLIC_URL_BASE;
 
-                return `${endpoint}/${this.bucketName}/${fileName}`;
-            } else {
-                // AWS S3 standard URL
-                return `https://${this.bucketName}.s3.${config.aws?.region}.amazonaws.com/${fileName}`;
+            if (publicBaseUrl) {
+                // Ensure no trailing slash on base and ensure leading slash on filename
+                const base = publicBaseUrl.endsWith('/') ? publicBaseUrl.slice(0, -1) : publicBaseUrl;
+                const path = fileName.startsWith('/') ? fileName : `/${fileName}`;
+                return `${base}${path}`;
             }
+
+            // Fallback: Construct generic S3/R2 URL if endpoint is available
+            const endpoint = process.env.S3_ENDPOINT;
+            if (endpoint) {
+                const cleanEndpoint = endpoint.replace(/^https?:\/\//, '');
+                return `https://${s3Config.bucketName}.${cleanEndpoint}/${fileName}`;
+            }
+
+            throw new Error('Could not construct public URL: S3_PUBLIC_URL_BASE and S3_ENDPOINT are missing');
         } catch (error) {
             logger.error('Error uploading file to storage:', error);
             throw error;

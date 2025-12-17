@@ -20,6 +20,8 @@ export { Conversation } from './Conversation';
 export { Message, MessageDirection, MessageStatus } from './Message';
 export { MessageLog } from './MessageLog';
 export { ECardTemplate } from './ECardTemplate';
+export { Campaign } from './Campaign';
+export { CampaignRecipient } from './CampaignRecipient';
 
 // Export enums separately
 export * from './enums';
@@ -46,6 +48,8 @@ import { ECardTemplate } from './ECardTemplate';
 import { Conversation } from './Conversation';
 import { Message } from './Message';
 import { MessageLog } from './MessageLog';
+import { Campaign } from './Campaign';
+import { CampaignRecipient } from './CampaignRecipient';
 
 export const entityClasses = [
   User,
@@ -69,4 +73,6 @@ export const entityClasses = [
   Conversation,
   Message,
   MessageLog,
+  Campaign,
+  CampaignRecipient,
 ];

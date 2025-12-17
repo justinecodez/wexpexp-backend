@@ -38,6 +38,8 @@ import messagingRoutes from './routes/messagingRoutes';
 import webhookRoutes from './routes/webhooks';
 import whatsappRoutes from './routes/whatsapp.routes';
 import conversationRoutes from './routes/conversations';
+import flowsRoutes from './routes/flows';
+import campaignRoutes from './routes/campaigns';
 
 // Import Socket.IO service
 import SocketService from './services/socketService';
@@ -242,6 +244,8 @@ class App {
     this.app.use('/api/messaging', messagingRoutes);
     this.app.use('/api/whatsapp', whatsappRoutes);
     this.app.use('/api/conversations', conversationRoutes);
+    this.app.use('/api/flows', flowsRoutes);
+    this.app.use('/api/campaigns', campaignRoutes);
     this.app.use('/webhooks', webhookRoutes); // WhatsApp webhook (no /api prefix)
 
     // Card generation routes

@@ -119,3 +119,18 @@ export enum NotificationType {
   PAYMENT_STATUS = 'PAYMENT_STATUS',
   SYSTEM_ALERT = 'SYSTEM_ALERT',
 }
+
+export enum CampaignStatus {
+  DRAFT = 'DRAFT',
+  SCHEDULED = 'SCHEDULED',
+  SENDING = 'SENDING',
+  COMPLETED = 'COMPLETED',
+  FAILED = 'FAILED',
+}
+
+export enum RecipientStatus {
+  PENDING = 'PENDING',
+  SENT = 'SENT',
+  DELIVERED = 'DELIVERED',
+  FAILED = 'FAILED',
+}
