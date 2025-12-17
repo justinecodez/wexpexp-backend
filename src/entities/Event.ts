@@ -83,10 +83,10 @@ export class Event {
   })
   status!: EventStatus;
 
-  @Column({ name: 'last_autosave_at', type: 'timestamp', nullable: true })
+  @Column({ name: 'last_autosave_at', nullable: true })
   lastAutosaveAt!: Date;
 
-  @Column({ name: 'published_at', type: 'timestamp', nullable: true })
+  @Column({ name: 'published_at', nullable: true })
   publishedAt!: Date;
 
   @Column({ name: 'is_public', default: false })
