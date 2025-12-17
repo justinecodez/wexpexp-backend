@@ -12,6 +12,11 @@ const corsOptions = {
       'http://localhost:3001',
       'http://127.0.0.1:3000',
       'http://127.0.0.1:3001',
+      // Production domains
+      'https://wexpevents.co.tz',
+      'https://www.wexpevents.co.tz',
+      'http://wexpevents.co.tz',
+      'http://www.wexpevents.co.tz',
     ];
 
     // In development, allow all localhost origins
