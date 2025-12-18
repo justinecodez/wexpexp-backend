@@ -37,10 +37,10 @@ export class CampaignRecipient {
     @Column({ name: 'message_id', type: 'varchar', length: 255, nullable: true })
     messageId?: string;
 
-    @Column({ name: 'sent_at', type: 'datetime', nullable: true })
+    @Column({ name: 'sent_at', type: 'timestamp', nullable: true })
     sentAt?: Date;
 
-    @Column({ name: 'delivered_at', type: 'datetime', nullable: true })
+    @Column({ name: 'delivered_at', type: 'timestamp', nullable: true })
     deliveredAt?: Date;
 
     @Column({ name: 'error_message', type: 'text', nullable: true })

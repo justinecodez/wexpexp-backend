@@ -50,13 +50,13 @@ export class Campaign {
     @Column({ name: 'failed_count', type: 'integer', default: 0 })
     failedCount!: number;
 
-    @Column({ name: 'scheduled_at', type: 'datetime', nullable: true })
+    @Column({ name: 'scheduled_at', type: 'timestamp', nullable: true })
     scheduledAt?: Date;
 
-    @Column({ name: 'started_at', type: 'datetime', nullable: true })
+    @Column({ name: 'started_at', type: 'timestamp', nullable: true })
     startedAt?: Date;
 
-    @Column({ name: 'completed_at', type: 'datetime', nullable: true })
+    @Column({ name: 'completed_at', type: 'timestamp', nullable: true })
     completedAt?: Date;
 
     @ManyToOne(() => User, { eager: true, nullable: true })
