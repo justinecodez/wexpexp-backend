@@ -7,7 +7,7 @@ const corsOptions = {
     if (!origin) return callback(null, true);
 
     const allowedOrigins = [
-      config.corsOrigin,
+      ...(typeof config.corsOrigin === 'string' ? config.corsOrigin.split(',').map(o => o.trim()) : [config.corsOrigin]),
       'http://localhost:3000',
       'http://localhost:3001',
       'http://127.0.0.1:3000',

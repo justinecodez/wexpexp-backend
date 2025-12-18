@@ -60,9 +60,15 @@ class App {
     this.app.set('trust proxy', true);
 
     this.server = createServer(this.app);
+
+    // Parse CORS origins if it's a comma-separated string
+    const allowedOrigins = typeof config.corsOrigin === 'string'
+      ? config.corsOrigin.split(',').map(o => o.trim())
+      : config.corsOrigin;
+
     this.io = new SocketIOServer(this.server, {
       cors: {
-        origin: config.corsOrigin,
+        origin: allowedOrigins,
         methods: ['GET', 'POST'],
         credentials: true,
       },
