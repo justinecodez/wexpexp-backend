@@ -1,84 +1,90 @@
-# WEXP Backend API + PostgreSQL Database
-# Connects to shared services-network (Redis)
+# WEXP Backend - Docker Compose (Development Only)
+# For production, use /deployment/docker-compose.yml instead
+
+# This file is for LOCAL DEVELOPMENT with Docker
+# To run backend in Docker for local testing
 
 networks:
-  services-network:
-    external: true
+  wexp-dev:
+    driver: bridge
 
 services:
-  # WEXP PostgreSQL Database
-  wexp-postgres:
+  # Local Redis for development
+  redis:
+    image: redis:7-alpine
+    container_name: wexp-dev-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    networks:
+      - wexp-dev
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Local PostgreSQL for development
+  postgres:
     image: postgres:15-alpine
-    container_name: wexp-postgres
+    container_name: wexp-dev-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: wexpevents
       POSTGRES_PASSWORD: wexpevents123
       POSTGRES_DB: wexpevents
+    ports:
+      - "5432:5432"
     volumes:
-      - wexp-postgres-data:/var/lib/postgresql/data
+      - postgres-dev-data:/var/lib/postgresql/data
     networks:
-      - services-network
+      - wexp-dev
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U wexpevents -d wexpevents"]
-      interval: 30s
-      timeout: 10s
+      test: ["CMD-SHELL", "pg_isready -U wexpevents"]
+      interval: 10s
+      timeout: 5s
       retries: 3
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
 
-  # WEXP Backend API
-  wexp-backend:
+  # WEXP Backend API (development mode)
+  api:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: wexp-backend
+    container_name: wexp-dev-api
     restart: unless-stopped
     env_file:
       - .env
     environment:
-      - NODE_ENV=production
+      - NODE_ENV=development
       - PORT=3001
-      # PostgreSQL connection
-      - DATABASE_HOST=wexp-postgres
+      - DATABASE_HOST=postgres
       - DATABASE_PORT=5432
       - DATABASE_USERNAME=wexpevents
       - DATABASE_PASSWORD=wexpevents123
       - DATABASE_NAME=wexpevents
-      # Redis connection
-      - REDIS_URL=redis://shared-redis:6379
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - REDIS_URL=redis://redis:6379
+    ports:
+      - "3001:3001"
     volumes:
       - ./uploads:/app/uploads
       - ./logs:/app/logs
+      # Mount source for hot reload (comment out if not needed)
+      # - .:/app
+      # - /app/node_modules
     networks:
-      - services-network
+      - wexp-dev
     depends_on:
-      wexp-postgres:
+      postgres:
         condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-    deploy:
-      resources:
-        limits:
-          memory: 768M
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+      redis:
+        condition: service_healthy
 
 volumes:
-  wexp-postgres-data:
+  postgres-dev-data:
+
+# Usage:
+# Development: docker compose up -d
+# View logs: docker compose logs -f api
+# Stop: docker compose down
+# Clean slate: docker compose down -v
