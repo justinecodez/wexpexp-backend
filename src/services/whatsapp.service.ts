@@ -957,21 +957,10 @@ export class WhatsAppService {
             ]
         });
 
-        // Add URL button for RSVP if provided and not localhost
-        // WhatsApp recipients cannot access localhost URLs
-        const hasValidRsvpLink = rsvpLink &&
-            !rsvpLink.includes('localhost') &&
-            !rsvpLink.includes('127.0.0.1') &&
-            !rsvpLink.includes('::1');
-
-        if (hasValidRsvpLink) {
-            components.push({
-                type: 'button',
-                sub_type: 'url',
-                index: 0,
-                parameters: [{ type: 'text', text: rsvpLink }]
-            });
-        }
+        // NOTE: The wedding_invitation_with_image template on Meta uses QuickReply buttons
+        // (not URL buttons), so we do NOT send button parameters here.
+        // If you need RSVP link functionality, update the template on Meta to use URL buttons.
+        // Error without this fix: "Button at index 0 must be of type QuickReply"
 
         return this.sendTemplateMessage(
             to,
@@ -1222,28 +1211,16 @@ export class WhatsAppService {
             ]
         });
 
-        // Add URL button for RSVP if provided and not localhost
-        // WhatsApp recipients cannot access localhost URLs
-        const hasValidRsvpLink = rsvpLink &&
-            !rsvpLink.includes('localhost') &&
-            !rsvpLink.includes('127.0.0.1') &&
-            !rsvpLink.includes('::1');
-
-        if (hasValidRsvpLink) {
-            components.push({
-                type: 'button',
-                sub_type: 'url',
-                index: 0,
-                parameters: [{ type: 'text', text: rsvpLink }]
-            });
-        }
+        // NOTE: The wedding_invitation_with_image template on Meta uses QuickReply buttons
+        // (not URL buttons), so we do NOT send button parameters here.
+        // If you need RSVP link functionality, update the template on Meta to use URL buttons.
+        // Error without this fix: "Button at index 0 must be of type QuickReply"
 
         logger.info(`📧 Sending Swahili template: ${templateName}`, {
             to,
             templateName,
             hasCard: hasValidCardUrl,
             usingFallback: !hasValidCardUrl,
-            hasRsvpButton: hasValidRsvpLink,
             languageCode
         });
 
