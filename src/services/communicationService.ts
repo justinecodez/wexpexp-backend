@@ -931,6 +931,8 @@ We look forward to celebrating with you.`;
               where: { id: data.invitationId },
               relations: ['event', 'event.user']
             });
+
+            console.log("INVITATION DATA =============>", JSON.stringify(invitation, null, 2));
             if (invitation) {
               event = invitation.event;
             }
@@ -939,6 +941,8 @@ We look forward to celebrating with you.`;
               where: { id: data.eventId },
               relations: ['user']
             });
+
+            console.log("EVENT DATA =============>", JSON.stringify(event, null, 2));
           }
 
           if (invitation && event) {
