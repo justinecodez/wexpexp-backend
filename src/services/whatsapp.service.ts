@@ -919,8 +919,8 @@ export class WhatsAppService {
 
         const components: any[] = [];
 
-        // Header: Card Image (optional - only include if cardImageUrl is provided, accessible, and not localhost)
-        // WhatsApp cannot access localhost URLs, so we skip the header if it's a local URL
+        // Header: Card Image (MANDATORY for wedding_invitation_with_image template)
+        // WhatsApp cannot access localhost URLs, so we use a fallback if needed
         const hasValidCardUrl = cardImageUrl &&
             cardImageUrl.trim() &&
             !cardImageUrl.includes('localhost') &&
@@ -928,20 +928,18 @@ export class WhatsAppService {
             !cardImageUrl.includes('::1') &&
             (cardImageUrl.startsWith('http://') || cardImageUrl.startsWith('https://'));
 
-        if (hasValidCardUrl) {
-            logger.info(`📷 Including card image in template header: ${cardImageUrl}`);
-            components.push({
-                type: 'header',
-                parameters: [
-                    {
-                        type: 'image',
-                        image: { link: cardImageUrl }
-                    }
-                ]
-            });
-        } else {
-            logger.info(`📷 No valid card URL provided - sending template without header image`);
-        }
+        const finalCardImageUrl = hasValidCardUrl ? cardImageUrl : 'https://wexpevents.co.tz/logo.png';
+
+        logger.info(`📷 Including card image in template header: ${finalCardImageUrl}`);
+        components.push({
+            type: 'header',
+            parameters: [
+                {
+                    type: 'image',
+                    image: { link: finalCardImageUrl }
+                }
+            ]
+        });
 
         // Body: Text with named variables (lowercase) matching database fields
         // Template: "Dear {{guestname}}, The family of Mr. and Mrs. {{hostname}} would like to invite you..."
@@ -1189,23 +1187,24 @@ export class WhatsAppService {
             !cardImageUrl.includes('::1') &&
             (cardImageUrl.startsWith('http://') || cardImageUrl.startsWith('https://'));
 
+        // 🎯 Hardcoded: Always use wedding_invitation_with_image as specifically requested by user.
+        // This template supports URL buttons, whereas wedding_invite (sw) may not or uses QuickReply.
+        const templateName = 'wedding_invitation_with_image';
+        const finalCardImageUrl = hasValidCardUrl ? cardImageUrl : 'https://wexpevents.co.tz/logo.png';
+
         const components: any[] = [];
 
-        // Header: Card Image (only if we have a valid card URL)
-        if (hasValidCardUrl) {
-            logger.info(`📷 Including card image in Swahili template header: ${cardImageUrl}`);
-            components.push({
-                type: 'header',
-                parameters: [
-                    {
-                        type: 'image',
-                        image: { link: cardImageUrl }
-                    }
-                ]
-            });
-        } else {
-            logger.info(`📷 No valid card URL provided - sending Swahili template without header image`);
-        }
+        // Header: Card Image (MANDATORY for wedding_invitation_with_image template)
+        logger.info(`📷 Including card image in Swahili template header: ${finalCardImageUrl}`);
+        components.push({
+            type: 'header',
+            parameters: [
+                {
+                    type: 'image',
+                    image: { link: finalCardImageUrl }
+                }
+            ]
+        });
 
         // Body: Text with named variables (lowercase) matching database fields
         // Note: Template uses lowercase {{guestname}}, {{hostname}}, etc. as required by WhatsApp
@@ -1239,21 +1238,18 @@ export class WhatsAppService {
             });
         }
 
-        // Choose template name based on whether we have a valid card URL
-        // Same template names as English, only language code differs
-        const templateName = hasValidCardUrl ? 'wedding_invitation_with_image' : 'wedding_invite';
-
         logger.info(`📧 Sending Swahili template: ${templateName}`, {
             to,
             templateName,
             hasCard: hasValidCardUrl,
+            usingFallback: !hasValidCardUrl,
             hasRsvpButton: hasValidRsvpLink,
             languageCode
         });
 
         return this.sendTemplateMessage(
             to,
-            templateName, // 'wedding_invitation_with_image' or 'wedding_invite'
+            templateName, // 'wedding_invitation_with_image'
             languageCode, // 'sw'
             components,
             invitation.guestName // Pass guest name for tracking
