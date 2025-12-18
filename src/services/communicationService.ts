@@ -861,19 +861,7 @@ We look forward to celebrating with you.`;
   ): Promise<{ success: boolean; error?: string; metadata?: any; requiresTemplate?: boolean }> {
     try {
       // Log incoming request for debugging
-      logger.info(`📱 WhatsApp Send Request for ${phone}`, {
-        phone,
-        type: data.type,
-        useTemplate: data.useTemplate,
-        invitationId: data.invitationId,
-        eventId: data.eventId,
-        includeCardAttachment: data.includeCardAttachment,
-        hasMessage: !!data.message,
-        messageLength: data.message?.length || 0,
-        hasMediaUrl: !!data.mediaUrl,
-        hasTemplateVariables: !!data.templateVariables,
-        fullRequest: JSON.stringify(data, null, 2),
-      });
+      console.log("Full Whatsapp Message Request: ===============>", JSON.stringify(data, null, 2));
 
       // Check if WhatsApp service is configured (basic check)
       if (!config.whatsapp.token || !config.whatsapp.phoneId) {
@@ -989,17 +977,8 @@ We look forward to celebrating with you.`;
               : undefined;
 
             // Use custom template variables if provided, otherwise use defaults
-            const customVars = data.templateVariables || {};
+            const customVars = data.templateVariables || {};            
 
-            // Debug: Log event hostname to verify it's being fetched from database
-            console.log('🔍 Event data for template:', {
-              eventId: event.id,
-              hostname: (event as any).hostname,
-              brideName: (event as any).brideName,
-              groomName: (event as any).groomName,
-              userName: event.user ? `${event.user.firstName} ${event.user.lastName}` : 'N/A',
-              customVars
-            });
 
             // 🎯 TEMPLATE SELECTION: Hardcoded to prefer wedding_invitation_with_image
             // as per user objective: "Specifically, to hardcode messaging options (always include card attachments...)"
