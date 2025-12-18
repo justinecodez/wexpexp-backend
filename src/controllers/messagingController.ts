@@ -471,7 +471,7 @@ export class MessagingController {
    */
   async sendWhatsAppDirect(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { to, message, mediaUrl, useTemplate, invitationId, eventId, templateVariables, language } = req.body;
+      const { to, message, mediaUrl, useTemplate, invitationId, eventId, templateVariables, language, includeCardAttachment } = req.body;
 
       logger.info('📱 WhatsApp Direct Request:', {
         to,
@@ -479,6 +479,7 @@ export class MessagingController {
         messageLength: message?.length || 0,
         hasMediaUrl: !!mediaUrl,
         useTemplate: useTemplate,
+        includeCardAttachment,
         invitationId,
         eventId,
         language: language || 'en', // Default to English if not specified
@@ -516,6 +517,7 @@ export class MessagingController {
         invitationId,
         eventId,
         useTemplate,
+        includeCardAttachment,
         language: language || 'en', // Pass language to service (default: English)
         templateVariables
       }, userId); // Pass userId to store message in chat database

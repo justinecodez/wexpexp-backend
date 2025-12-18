@@ -1001,23 +1001,34 @@ We look forward to celebrating with you.`;
               customVars
             });
 
-            // Choose template based on whether we have a valid card URL
-            if (cardUrl) {
-              // Use wedding_invitation_with_image template when card is available
-              console.log('🔍 Template Selection Decision ==========================================>', {
+            // 🎯 TEMPLATE SELECTION: Hardcoded to prefer wedding_invitation_with_image
+            // as per user objective: "Specifically, to hardcode messaging options (always include card attachments...)"
+            const forceImageTemplate = data.includeCardAttachment !== false;
+            let effectiveCardUrl = cardUrl;
+
+            // If we are forcing an image template but have no card, use a placeholder
+            // to avoid template validation errors (missing header)
+            if (forceImageTemplate && !effectiveCardUrl) {
+              effectiveCardUrl = 'https://wexpevents.co.tz/logo.png'; // Fallback to logo
+              logger.warn(`⚠️ No card URL found for ${phone}, using placeholder logo to satisfy wedding_invitation_with_image template`);
+            }
+
+            if (effectiveCardUrl && forceImageTemplate) {
+              // Use wedding_invitation_with_image template
+              console.log('🔍 Template Selection Decision (FORCED) ==========================================>', {
                 phone,
                 templateName: 'wedding_invitation_with_image',
-                hasCardUrl: true,
-                cardUrl: cardUrl.substring(0, 50) + '...',
+                hasCardUrl: !!cardUrl,
+                effectiveCardUrl: effectiveCardUrl.substring(0, 50) + '...',
                 includeCardAttachment: data.includeCardAttachment,
               });
 
-              logger.info(`📧 Using wedding_invitation_with_image template for ${phone}`, {
+              logger.info(`📧 Using wedding_invitation_with_image template for ${phone} (Forced)`, {
                 invitationId: invitation.id,
                 eventId: event.id,
                 guestName: invitation.guestName,
-                hasCard: true,
-                cardUrl: 'provided (public URL)',
+                hasCard: !!cardUrl,
+                effectiveCardUrl: effectiveCardUrl.substring(0, 50) + '...',
                 includeCardAttachment: data.includeCardAttachment,
                 templateName: 'wedding_invitation_with_image',
                 language: data.language || 'en'
@@ -1032,7 +1043,7 @@ We look forward to celebrating with you.`;
                   phone,
                   {
                     guestName: customVars.guestname || invitation.guestName,
-                    cardUrl: cardUrl
+                    cardUrl: effectiveCardUrl
                   },
                   {
                     eventDate: event.eventDate,
@@ -1045,7 +1056,7 @@ We look forward to celebrating with you.`;
                     groomName: customVars.groomname || (event as any).groomName,
                     hostname: (event as any).hostname,
                   },
-                  cardUrl,
+                  effectiveCardUrl,
                   rsvpLink,
                   'sw' // Swahili language code
                 );
@@ -1055,7 +1066,7 @@ We look forward to celebrating with you.`;
                   phone,
                   {
                     guestName: customVars.guestname || invitation.guestName,
-                    cardUrl: cardUrl
+                    cardUrl: effectiveCardUrl
                   },
                   {
                     eventDate: event.eventDate,
@@ -1068,7 +1079,7 @@ We look forward to celebrating with you.`;
                     groomName: customVars.groomname || (event as any).groomName,
                     hostname: (event as any).hostname,
                   },
-                  cardUrl,
+                  effectiveCardUrl,
                   rsvpLink,
                   selectedLanguage, // Use selected language
                   {
@@ -1086,8 +1097,8 @@ We look forward to celebrating with you.`;
                 messageStatus: response.messages?.[0]?.message_status
               });
             } else {
-              // Use wedding_invite template when no card is available
-              console.log('🔍 Template Selection Decision ==========================================>', {
+              // Fallback to wedding_invite ONLY if image template is explicitly disabled
+              console.log('🔍 Template Selection Decision (FALLBACK) ==========================================>', {
                 phone,
                 templateName: 'wedding_invite',
                 hasCardUrl: false,
