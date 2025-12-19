@@ -144,7 +144,7 @@ const config: Config = {
   // JWT
   jwtSecret: process.env.JWT_SECRET || 'your-super-secret-jwt-key-here',
   jwtRefreshSecret: process.env.JWT_REFRESH_SECRET || 'your-super-secret-refresh-key-here',
-  jwtExpireTime: process.env.JWT_EXPIRE_TIME || '1h',
+  jwtExpireTime: process.env.JWT_EXPIRE_TIME || '6h',
   jwtRefreshExpireTime: process.env.JWT_REFRESH_EXPIRE_TIME || '7d',
 
   // File Upload
