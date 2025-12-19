@@ -40,6 +40,7 @@ import whatsappRoutes from './routes/whatsapp.routes';
 import conversationRoutes from './routes/conversations';
 import flowsRoutes from './routes/flows';
 import campaignRoutes from './routes/campaigns';
+import logsRoutes from './routes/logs';
 
 // Import Socket.IO service
 import SocketService from './services/socketService';
@@ -252,6 +253,7 @@ class App {
     this.app.use('/api/conversations', conversationRoutes);
     this.app.use('/api/flows', flowsRoutes);
     this.app.use('/api/campaigns', campaignRoutes);
+    this.app.use('/api/logs', logsRoutes); // Log viewer endpoint
     this.app.use('/webhooks', webhookRoutes); // WhatsApp webhook (no /api prefix)
 
     // Card generation routes
