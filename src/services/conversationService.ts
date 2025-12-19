@@ -33,7 +33,7 @@ export class ConversationService {
       console.log('Guest phone number:----------->', phoneNumber);
       // Find invitation by phone number
       const invitation = await this.invitationRepository.findOne({
-        where: { guestPhone: "255757714834" },
+        where: { guestPhone: normalizedPhone },
         relations: ['event'],
       });
 
