@@ -29,9 +29,11 @@ export class ConversationService {
       // Normalize phone number for lookup
       const normalizedPhone = phoneNumber.replace(/[\s+]/g, '');
 
+      console.warn('Normalized phone number:', normalizedPhone);
+      console.warn('Guest phone number:', phoneNumber);
       // Find invitation by phone number
       const invitation = await this.invitationRepository.findOne({
-        where: { guestPhone: normalizedPhone },
+        where: { guestPhone: "255757714834" },
         relations: ['event'],
       });
 
