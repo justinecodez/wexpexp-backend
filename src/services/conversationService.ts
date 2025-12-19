@@ -37,6 +37,13 @@ export class ConversationService {
         relations: ['event'],
       });
 
+      console.warn('Invitation:===>', invitation);
+
+      const allInvitations = await this.invitationRepository.find({
+        relations: ['event'],
+      });
+      console.warn('All invitations:===>', allInvitations);
+
       if (invitation && invitation.event) {
         return invitation.event.userId;
       }
