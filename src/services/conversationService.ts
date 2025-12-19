@@ -63,17 +63,34 @@ export class ConversationService {
     // ALWAYS look up guest name from invitation system first
     let officialGuestName: string | null = null;
     try {
-      const invitation = await this.invitationRepository.findOne({
-        where: { guestPhone: normalizedPhone },
-        order: { createdAt: 'DESC' }, // Get most recent invitation
-        select: ['guestName'],
-      });
+      // Try multiple phone number formats to find the invitation
+      // Phone numbers can be stored as: 255..., +255..., 0..., etc.
+      const phoneVariations = [
+        normalizedPhone,
+        normalizedPhone.replace(/^255/, '0'),     // 255757... -> 0757...
+        normalizedPhone.replace(/^0/, '255'),     // 0757... -> 255757...
+        `+${normalizedPhone}`,                     // 255757... -> +255757...
+        normalizedPhone.replace(/^\+/, ''),        // +255757... -> 255757...
+      ].filter((v, i, arr) => arr.indexOf(v) === i); // Remove duplicates
+
+      let invitation = null;
+      for (const phoneVariant of phoneVariations) {
+        invitation = await this.invitationRepository.findOne({
+          where: { guestPhone: phoneVariant },
+          order: { createdAt: 'DESC' }, // Get most recent invitation
+          select: ['guestName'],
+        });
+        if (invitation) {
+          logger.debug(`Found invitation with phone format: ${phoneVariant}`);
+          break;
+        }
+      }
 
       if (invitation && invitation.guestName) {
         officialGuestName = invitation.guestName;
         logger.info(`✅ Found official guest name from invitation: "${officialGuestName}" for ${normalizedPhone}`);
       } else {
-        logger.debug(`No invitation found for ${normalizedPhone}, will use WhatsApp name or phone number`);
+        logger.debug(`No invitation found for ${normalizedPhone} (tried ${phoneVariations.length} formats), will use provided name or phone number`);
       }
     } catch (error) {
       logger.warn(`Error looking up guest name for ${normalizedPhone}:`, error);
