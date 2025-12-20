@@ -17,6 +17,8 @@ const corsOptions = {
       'https://www.wexpevents.co.tz',
       'http://wexpevents.co.tz',
       'http://www.wexpevents.co.tz',
+      // Mobile API subdomain
+      'https://api.justinecodez.com',
     ];
 
     // In development, allow all localhost origins
