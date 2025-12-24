@@ -714,44 +714,62 @@ export class InvitationService {
     successful: InvitationResponse[];
     failed: Array<{ row: any; error: string }>;
   }> {
+    // Validate eventId format
+    if (!eventId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(eventId)) {
+      logger.error(`❌ Invalid eventId format: "${eventId}"`);
+      throw new AppError('Invalid event ID format', 400, 'INVALID_EVENT_ID');
+    }
+
+    logger.info(`📋 Starting Excel import process for event: ${eventId} by user: ${userId}`);
+
     // Verify event ownership
     const event = await this.eventRepository.findOne({
       where: { id: eventId },
-      select: ['userId'],
+      select: ['userId', 'title'],
     });
 
     if (!event) {
+      logger.error(`❌ Event not found: ${eventId}`);
       throw new AppError('Event not found', 404, 'EVENT_NOT_FOUND');
     }
 
     if (event.userId !== userId) {
-      logger.warn(`Permission denied for import: User ${userId} attempting to import to event ${eventId} owned by ${event.userId}`);
+      logger.warn(`⚠️ User ${userId} attempted to import guests to event ${eventId} owned by ${event.userId}`);
       throw new AppError('Access denied to this event', 403, 'EVENT_ACCESS_DENIED');
     }
 
-    logger.info(`Permission verified for import: User ${userId} to event ${eventId}`);
+    logger.info(`✅ Permission verified for import: ${event.title} (${eventId})`);
 
     try {
       const workbook = XLSX.readFile(filePath);
+      logger.info(`📄 Excel file loaded successfully from: ${filePath}`);
+
       const sheetName = workbook.SheetNames[0];
       const sheet = workbook.Sheets[sheetName];
       const guests = XLSX.utils.sheet_to_json(sheet);
 
+      logger.info(`📊 Found ${guests.length} potential guests in Excel file`);
+
+      if (guests.length === 0) {
+        throw new Error('Excel file is empty or has no data');
+      }
+
       const successful: InvitationResponse[] = [];
       const failed: Array<{ row: any; error: string }> = [];
 
-      logger.info(`Starting Excel import for event: ${eventId} with ${guests.length} potential guests`);
+      logger.info(`🚀 Processing ${guests.length} guests...`);
 
-      for (const guest of guests as any[]) {
+      for (const [index, guest] of (guests as any[]).entries()) {
         try {
           // Map Excel columns to invitation data (with fallback names)
           const guestName = guest.name || guest.guestName || guest['Guest Name'] || guest['Name'];
           const guestEmail = guest.email || guest.guestEmail || guest['Email'];
           const guestPhoneRaw = guest.phone || guest.guestPhone || guest['Phone'];
-          const methodRaw = guest.method || guest.invitationMethod || guest['Invitation Method'] || 'EMAIL';
+          const methodRaw = guest.method || guest.invitationMethod || guest['Invitation Method'] || 'WHATSAPP';
           const specialRequirements = guest.requirements || guest.specialRequirements || guest['Special Requirements'] || guest['Note'];
 
           if (!guestName) {
+            logger.debug(`Skipping row ${index + 1}: Name is missing`);
             throw new Error('Guest name is required');
           }
 
@@ -767,6 +785,7 @@ export class InvitationService {
           const invitation = await this.createInvitation(userId, invitationData);
           successful.push(invitation);
         } catch (error) {
+          logger.warn(`Failed to import guest on row ${index + 1}:`, error instanceof Error ? error.message : 'Unknown error');
           failed.push({
             row: guest,
             error: error instanceof Error ? error.message : 'Unknown error',
@@ -785,8 +804,16 @@ export class InvitationService {
 
       return { successful, failed };
     } catch (error) {
+      // Clean up temporary file even on error
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
       logger.error('Error parsing Excel file', { eventId, error });
-      throw new AppError('Failed to parse Excel file', 400, 'EXCEL_PARSE_ERROR');
+      throw new AppError(
+        error instanceof Error ? error.message : 'Failed to parse Excel file',
+        400,
+        'EXCEL_PARSE_ERROR'
+      );
     }
   }
 
