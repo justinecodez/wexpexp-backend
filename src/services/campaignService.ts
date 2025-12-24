@@ -34,8 +34,8 @@ export class CampaignService {
             throw new Error('Campaign not found');
         }
 
-        if (campaign.status !== CampaignStatus.DRAFT) {
-            throw new Error('Cannot import recipients to campaign that is not in DRAFT status');
+        if (campaign.status === CampaignStatus.SENDING || campaign.status === CampaignStatus.SCHEDULED) {
+            throw new Error(`Cannot import recipients to campaign that is in ${campaign.status} status`);
         }
 
         const result: ImportResult = {

@@ -205,9 +205,21 @@ export class CampaignController {
                 return;
             }
 
-            if (campaign.status !== CampaignStatus.DRAFT) {
-                res.status(400).json({ message: 'Cannot add recipients to campaign that is not in DRAFT status' });
+            // Allow adding recipients to DRAFT, COMPLETED, or FAILED campaigns
+            if (campaign.status === CampaignStatus.SENDING || campaign.status === CampaignStatus.SCHEDULED) {
+                res.status(400).json({ message: `Cannot add recipients to campaign that is in ${campaign.status} status` });
                 return;
+            }
+
+            // Reset to DRAFT if it was COMPLETED or FAILED
+            if (campaign.status !== CampaignStatus.DRAFT) {
+                campaign.status = CampaignStatus.DRAFT;
+                campaign.sentCount = 0;
+                campaign.deliveredCount = 0;
+                campaign.failedCount = 0;
+                campaign.startedAt = null;
+                campaign.completedAt = null;
+                // Note: we don't reset totalRecipients here, we increment it below
             }
 
             // Use centralized phone normalization
@@ -270,9 +282,21 @@ export class CampaignController {
                 return;
             }
 
-            if (campaign.status !== CampaignStatus.DRAFT) {
-                res.status(400).json({ message: 'Cannot import recipients to campaign that is not in DRAFT status' });
+            // Allow importing recipients to DRAFT, COMPLETED, or FAILED campaigns
+            if (campaign.status === CampaignStatus.SENDING || campaign.status === CampaignStatus.SCHEDULED) {
+                res.status(400).json({ message: `Cannot import recipients to campaign that is in ${campaign.status} status` });
                 return;
+            }
+
+            // Reset to DRAFT if it was COMPLETED or FAILED
+            if (campaign.status !== CampaignStatus.DRAFT) {
+                campaign.status = CampaignStatus.DRAFT;
+                campaign.sentCount = 0;
+                campaign.deliveredCount = 0;
+                campaign.failedCount = 0;
+                campaign.startedAt = null;
+                campaign.completedAt = null;
+                await campaignRepo.save(campaign);
             }
 
             const result = await campaignService.importRecipientsFromExcel(id, file.buffer);
