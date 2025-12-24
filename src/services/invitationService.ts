@@ -727,8 +727,11 @@ export class InvitationService {
     }
 
     if (event.userId !== userId) {
+      logger.warn(`Permission denied for import: User ${userId} attempting to import to event ${eventId} owned by ${event.userId}`);
       throw new AppError('Access denied to this event', 403, 'EVENT_ACCESS_DENIED');
     }
+
+    logger.info(`Permission verified for import: User ${userId} to event ${eventId}`);
 
     try {
       const workbook = XLSX.readFile(filePath);
@@ -738,6 +741,8 @@ export class InvitationService {
 
       const successful: InvitationResponse[] = [];
       const failed: Array<{ row: any; error: string }> = [];
+
+      logger.info(`Starting Excel import for event: ${eventId} with ${guests.length} potential guests`);
 
       for (const guest of guests as any[]) {
         try {
@@ -783,12 +788,12 @@ export class InvitationService {
       }
 
       logger.info(
-        `Excel import completed: ${successful.length} successful, ${failed.length} failed`
+        `Excel import completed for event ${eventId}: ${successful.length} successful, ${failed.length} failed`
       );
 
       return { successful, failed };
     } catch (error) {
-      logger.error('Error parsing Excel file', { error });
+      logger.error('Error parsing Excel file', { eventId, error });
       throw new AppError('Failed to parse Excel file', 400, 'EXCEL_PARSE_ERROR');
     }
   }
