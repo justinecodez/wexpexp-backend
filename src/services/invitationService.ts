@@ -25,6 +25,7 @@ import path from 'path';
 
 import { storageService } from './storageService';
 import * as XLSX from 'xlsx';
+import { normalizePhone, isValidPhone } from '../utils/phoneUtils';
 
 export class InvitationService {
   private invitationRepository: Repository<Invitation>;
@@ -66,23 +67,20 @@ export class InvitationService {
       throw new AppError('Event has reached maximum guest capacity', 400, 'MAX_GUESTS_REACHED');
     }
 
+    // Use centralized phone normalization
+    const formattedPhone = guestPhone ? normalizePhone(guestPhone) : '';
+
     // Validate contact information based on method
     if (invitationMethod === 'EMAIL' && !guestEmail) {
       throw new AppError('Email is required for email invitations', 400, 'EMAIL_REQUIRED');
     }
 
-    if ((invitationMethod === 'SMS' || invitationMethod === 'WHATSAPP') && !guestPhone) {
+    if ((invitationMethod === 'SMS' || invitationMethod === 'WHATSAPP') && !formattedPhone) {
       throw new AppError(
-        'Phone number is required for SMS/WhatsApp invitations',
+        'A valid phone number is required for SMS/WhatsApp invitations',
         400,
         'PHONE_REQUIRED'
       );
-    }
-
-    // Use phone number as provided (no validation)
-    let formattedPhone = guestPhone;
-    if (guestPhone) {
-      formattedPhone = guestPhone.trim();
     }
 
     // Check for duplicate invitations
@@ -659,7 +657,7 @@ export class InvitationService {
                   eventId,
                   guestName: guest.name || guest.guestName || guest['Guest Name'],
                   guestEmail: guest.email || guest.guestEmail || guest['Email'],
-                  guestPhone: guest.phone || guest.guestPhone || guest['Phone'],
+                  guestPhone: normalizePhone(guest.phone || guest.guestPhone || guest['Phone']),
                   invitationMethod: (
                     guest.method ||
                     guest.invitationMethod ||
@@ -757,17 +755,11 @@ export class InvitationService {
             throw new Error('Guest name is required');
           }
 
-          // Normalize phone number
-          let formattedPhone = guestPhoneRaw ? String(guestPhoneRaw).replace(/[^\d+]/g, '') : '';
-          if (formattedPhone.startsWith('+')) formattedPhone = formattedPhone.substring(1);
-          if (formattedPhone.startsWith('0')) formattedPhone = '255' + formattedPhone.substring(1);
-          if (formattedPhone.length === 9) formattedPhone = '255' + formattedPhone;
-
           const invitationData: CreateInvitationRequest = {
             eventId,
             guestName: String(guestName).trim(),
             guestEmail: guestEmail ? String(guestEmail).trim().toLowerCase() : undefined,
-            guestPhone: formattedPhone || undefined,
+            guestPhone: normalizePhone(guestPhoneRaw),
             invitationMethod: methodRaw.toString().toUpperCase() as any,
             specialRequirements: specialRequirements ? String(specialRequirements).trim() : undefined,
           };

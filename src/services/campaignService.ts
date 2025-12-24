@@ -6,6 +6,7 @@ import { WhatsAppService } from './whatsapp.service';
 import conversationService from './conversationService';
 import logger from '../config/logger';
 import * as XLSX from 'xlsx';
+import { normalizePhone } from '../utils/phoneUtils';
 
 const whatsAppService = new WhatsAppService();
 
@@ -69,14 +70,13 @@ export class CampaignService {
                         continue;
                     }
 
-                    // Clean and validate phone number
-                    const cleanPhone = String(phone).replace(/[\s\-()]/g, '');
+                    // Clean and validate phone number using centralized utility
+                    const cleanPhone = normalizePhone(phone);
 
-                    // Check if it's a valid Tanzania phone number
-                    if (!/^255\d{9}$/.test(cleanPhone)) {
+                    if (!cleanPhone) {
                         result.errors.push({
                             row: rowNumber,
-                            error: `Invalid phone format: ${phone}. Expected: 255XXXXXXXXX`
+                            error: `Invalid phone format: ${phone}.`
                         });
                         result.failed++;
                         continue;

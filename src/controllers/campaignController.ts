@@ -5,6 +5,7 @@ import { CampaignRecipient } from '../entities/CampaignRecipient';
 import { CampaignStatus, RecipientStatus } from '../entities/enums';
 import logger from '../config/logger';
 import campaignService from '../services/campaignService';
+import { normalizePhone } from '../utils/phoneUtils';
 
 export class CampaignController {
     /**
@@ -209,26 +210,11 @@ export class CampaignController {
                 return;
             }
 
-            // Improved phone normalization
-            let cleanPhone = phone.replace(/[^\d+]/g, ''); // Remove anything not a digit or +
+            // Use centralized phone normalization
+            const cleanPhone = normalizePhone(phone);
 
-            // Handle + prefix
-            if (cleanPhone.startsWith('+')) {
-                cleanPhone = cleanPhone.substring(1);
-            }
-
-            // Handle leading 0 (replace with 255)
-            if (cleanPhone.startsWith('0')) {
-                cleanPhone = '255' + cleanPhone.substring(1);
-            }
-
-            // Add 255 if clearly missing for TZ numbers (9 digits)
-            if (cleanPhone.length === 9) {
-                cleanPhone = '255' + cleanPhone;
-            }
-
-            if (!/^255\d{9}$/.test(cleanPhone)) {
-                res.status(400).json({ message: `Invalid phone number format: ${phone}. Expected: 255XXXXXXXXX or +255... or 0...` });
+            if (!cleanPhone) {
+                res.status(400).json({ message: `Invalid phone number format: ${phone}.` });
                 return;
             }
 
@@ -325,13 +311,10 @@ export class CampaignController {
             if (name !== undefined) recipient.name = name;
 
             if (phone !== undefined) {
-                // Improved phone normalization
-                let cleanPhone = phone.replace(/[^\d+]/g, '');
-                if (cleanPhone.startsWith('+')) cleanPhone = cleanPhone.substring(1);
-                if (cleanPhone.startsWith('0')) cleanPhone = '255' + cleanPhone.substring(1);
-                if (cleanPhone.length === 9) cleanPhone = '255' + cleanPhone;
+                // Use centralized phone normalization
+                const cleanPhone = normalizePhone(phone);
 
-                if (!/^255\d{9}$/.test(cleanPhone)) {
+                if (!cleanPhone) {
                     res.status(400).json({ message: 'Invalid phone number format' });
                     return;
                 }

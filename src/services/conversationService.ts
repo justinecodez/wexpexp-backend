@@ -7,6 +7,7 @@ import { Message, MessageDirection, MessageStatus } from '../entities/Message';
 import { Invitation } from '../entities/Invitation';
 import { Event } from '../entities/Event';
 import socketEmitter from '../utils/socketEmitter';
+import { normalizePhone } from '../utils/phoneUtils';
 
 export class ConversationService {
   private conversationRepository: Repository<Conversation>;
@@ -27,7 +28,7 @@ export class ConversationService {
   private async findUserIdFromPhone(phoneNumber: string): Promise<string | null> {
     try {
       // Normalize phone number for lookup
-      const normalizedPhone = phoneNumber.replace(/[\s+]/g, '');
+      const normalizedPhone = normalizePhone(phoneNumber);
 
       // Find invitation by phone number
       const invitation = await this.invitationRepository.findOne({
@@ -57,20 +58,20 @@ export class ConversationService {
     contactName?: string,
     channel: 'WHATSAPP' | 'SMS' = 'WHATSAPP'
   ): Promise<Conversation> {
-    // Normalize phone number (remove + and spaces)
-    const normalizedPhone = phoneNumber.replace(/[\s+]/g, '');
+    // Normalize phone number using centralized utility
+    const normalizedPhone = normalizePhone(phoneNumber);
 
     // ALWAYS look up guest name from invitation system first
     let officialGuestName: string | null = null;
     try {
       // Try multiple phone number formats to find the invitation
       // Phone numbers can be stored as: 255..., +255..., 0..., etc.
+      // Try variations to support existing data that might be in different formats
       const phoneVariations = [
         normalizedPhone,
         normalizedPhone.replace(/^255/, '0'),     // 255757... -> 0757...
-        normalizedPhone.replace(/^0/, '255'),     // 0757... -> 255757...
+        `0${normalizedPhone.substring(3)}`,        // 255757... -> 0757...
         `+${normalizedPhone}`,                     // 255757... -> +255757...
-        normalizedPhone.replace(/^\+/, ''),        // +255757... -> 255757...
       ].filter((v, i, arr) => arr.indexOf(v) === i); // Remove duplicates
 
       let invitation = null;
@@ -629,7 +630,7 @@ export class ConversationService {
           select: ['guestPhone'],
         });
         const phoneNumbersForEvent = invitationsWithEvent
-          .map(inv => inv.guestPhone?.replace(/[\s+]/g, ''))
+          .map(inv => normalizePhone(inv.guestPhone))
           .filter(Boolean);
 
         // Filter conversations by eventId OR by phone numbers in invitations for this event
@@ -657,8 +658,8 @@ export class ConversationService {
       // Enrich each conversation with all associated events via invitations
       const enrichedConversations = await Promise.all(
         conversations.map(async (conversation) => {
-          // Find all invitations for this phone number to get all associated events
-          const normalizedPhone = conversation.phoneNumber.replace(/[\s+]/g, '');
+          // Normalize phone number for lookup
+          const normalizedPhone = normalizePhone(conversation.phoneNumber);
           const invitations = await this.invitationRepository.find({
             where: { guestPhone: normalizedPhone },
             relations: ['event'],

@@ -1,4 +1,5 @@
 import { format } from 'date-fns';
+import { normalizePhone } from './phoneUtils';
 
 export interface UserData {
   name?: string;
@@ -43,7 +44,7 @@ export interface InvitationData extends EventData {
  * SMS Message Templates
  */
 export class SMSTemplates {
-  
+
   /**
    * Welcome message for new users
    */
@@ -76,17 +77,17 @@ export class SMSTemplates {
     const dateStr = format(data.date, 'dd/MM/yyyy');
     const timeStr = data.time || format(data.date, 'HH:mm');
     const location = data.location || 'Location TBA';
-    
+
     let message = `🎉 Karibu! You're invited to "${data.title}" on ${dateStr} at ${timeStr}. Location: ${location}`;
-    
+
     if (data.rsvpLink) {
       message += `. RSVP: ${data.rsvpLink}`;
     }
-    
+
     if (data.organizerName) {
       message += ` - ${data.organizerName}`;
     }
-    
+
     return message;
   }
 
@@ -96,7 +97,7 @@ export class SMSTemplates {
   static eventReminder24h(data: EventData): string {
     const dateStr = format(data.date, 'dd/MM/yyyy');
     const timeStr = data.time || format(data.date, 'HH:mm');
-    
+
     return `⏰ Reminder: "${data.title}" is tomorrow (${dateStr}) at ${timeStr}. Location: ${data.location || 'TBA'}. See you there!`;
   }
 
@@ -105,7 +106,7 @@ export class SMSTemplates {
    */
   static eventReminder1h(data: EventData): string {
     const timeStr = data.time || format(data.date, 'HH:mm');
-    
+
     return `🔔 Final reminder: "${data.title}" starts in 1 hour at ${timeStr}. Location: ${data.location || 'TBA'}. Don't miss it!`;
   }
 
@@ -128,7 +129,7 @@ export class SMSTemplates {
    */
   static paymentConfirmation(data: PaymentData): string {
     const amount = data.currency === 'USD' ? `$${data.amount}` : `TZS ${data.amount.toLocaleString()}`;
-    
+
     return `✅ Payment confirmed! ${amount} received for "${data.eventTitle}". Transaction ID: ${data.transactionId}. Thank you for using WEXP!`;
   }
 
@@ -137,7 +138,7 @@ export class SMSTemplates {
    */
   static paymentReminder(data: PaymentData): string {
     const amount = data.currency === 'USD' ? `$${data.amount}` : `TZS ${data.amount.toLocaleString()}`;
-    
+
     return `💳 Payment reminder: ${amount} payment pending for "${data.eventTitle}". Complete payment to secure your booking. Visit wexp.co.tz`;
   }
 
@@ -146,7 +147,7 @@ export class SMSTemplates {
    */
   static ticketDelivery(data: EventData & { ticketUrl?: string }): string {
     let message = `🎫 Your ticket for "${data.title}" is ready! `;
-    
+
     if (data.ticketUrl) {
       message += `Download: ${data.ticketUrl}`;
     } else if (data.qrCodeUrl) {
@@ -154,7 +155,7 @@ export class SMSTemplates {
     } else {
       message += 'Check your email for ticket details.';
     }
-    
+
     return message;
   }
 
@@ -167,13 +168,13 @@ export class SMSTemplates {
       not_attending: '❌',
       maybe: '🤔'
     };
-    
+
     const statusText = {
       attending: 'confirmed your attendance',
       not_attending: 'declined',
       maybe: 'marked as maybe'
     };
-    
+
     return `${statusEmoji[status]} You have ${statusText[status]} for "${data.title}" on ${format(data.date, 'dd/MM/yyyy')}. Thank you for responding!`;
   }
 
@@ -193,14 +194,14 @@ export class SMSTemplates {
    */
   static custom(message: string, data?: Record<string, any>): string {
     if (!data) return message;
-    
+
     // Simple template replacement
     let processedMessage = message;
     Object.keys(data).forEach(key => {
       const value = data[key];
       processedMessage = processedMessage.replace(new RegExp(`{{${key}}}`, 'g'), value);
     });
-    
+
     return processedMessage;
   }
 }
@@ -209,7 +210,7 @@ export class SMSTemplates {
  * Email Templates (HTML)
  */
 export class EmailTemplates {
-  
+
   /**
    * Generate email header HTML
    */
@@ -299,7 +300,7 @@ export class EmailTemplates {
       
       <p>Asante sana for joining WEXP!</p>
     `;
-    
+
     return this.wrapInEmailTemplate(content, 'Welcome to WEXP');
   }
 
@@ -309,7 +310,7 @@ export class EmailTemplates {
   static eventInvitation(data: InvitationData): string {
     const dateStr = format(data.date, 'EEEE, MMMM do, yyyy');
     const timeStr = data.time || format(data.date, 'HH:mm');
-    
+
     const content = `
       <h2>You're Invited to ${data.title}!</h2>
       
@@ -341,7 +342,7 @@ export class EmailTemplates {
       
       <p>Best regards,<br>${data.organizerName || 'WEXP Events Team'}</p>
     `;
-    
+
     return this.wrapInEmailTemplate(content, `Invitation: ${data.title}`);
   }
 
@@ -353,7 +354,7 @@ export class EmailTemplates {
     const timeStr = data.time || format(data.date, 'HH:mm');
     const reminderText = reminderType === '24h' ? 'tomorrow' : 'in 1 hour';
     const urgency = reminderType === '1h' ? 'Final ' : '';
-    
+
     const content = `
       <h2>⏰ ${urgency}Event Reminder</h2>
       
@@ -385,7 +386,7 @@ export class EmailTemplates {
       
       <p>Best regards,<br>${data.organizerName || 'WEXP Events Team'}</p>
     `;
-    
+
     return this.wrapInEmailTemplate(content, `Reminder: ${data.title}`);
   }
 
@@ -394,7 +395,7 @@ export class EmailTemplates {
    */
   static paymentConfirmation(data: PaymentData): string {
     const amount = data.currency === 'USD' ? `$${data.amount}` : `TZS ${data.amount.toLocaleString()}`;
-    
+
     const content = `
       <h2>✅ Payment Confirmed!</h2>
       
@@ -424,7 +425,7 @@ export class EmailTemplates {
       
       <p>Asante sana for choosing WEXP!</p>
     `;
-    
+
     return this.wrapInEmailTemplate(content, 'Payment Confirmation');
   }
 }
@@ -433,22 +434,12 @@ export class EmailTemplates {
  * Utility functions for message formatting
  */
 export class MessageUtils {
-  
+
   /**
-   * Format phone number for Tanzania
+   * Format phone number using centralized utility
    */
   static formatTanzanianPhone(phone: string): string {
-    const cleaned = phone.replace(/[\s-+()]/g, '');
-    
-    if (cleaned.startsWith('255')) {
-      return cleaned;
-    } else if (cleaned.startsWith('0')) {
-      return '255' + cleaned.substring(1);
-    } else if (cleaned.length === 9 && /^[67]/.test(cleaned)) {
-      return '255' + cleaned;
-    }
-    
-    return cleaned; // Return as-is if format is unclear
+    return normalizePhone(phone);
   }
 
   /**
@@ -458,7 +449,7 @@ export class MessageUtils {
     if (message.length <= maxLength) {
       return message;
     }
-    
+
     return message.substring(0, maxLength - 3) + '...';
   }
 
@@ -468,11 +459,11 @@ export class MessageUtils {
   static generateVerificationCode(length: number = 6): string {
     const digits = '0123456789';
     let code = '';
-    
+
     for (let i = 0; i < length; i++) {
       code += digits[Math.floor(Math.random() * digits.length)];
     }
-    
+
     return code;
   }
 
@@ -494,17 +485,11 @@ export class MessageUtils {
   }
 
   /**
-   * Validate Tanzanian phone number
+   * Validate phone number after normalization
    */
   static isValidTanzanianPhone(phone: string): boolean {
-    const cleaned = phone.replace(/[\s-+()]/g, '');
-    const patterns = [
-      /^255[67]\d{8}$/, // International format
-      /^0[67]\d{8}$/,   // Local format
-      /^[67]\d{8}$/     // Without country code
-    ];
-    
-    return patterns.some(pattern => pattern.test(cleaned));
+    const normalized = normalizePhone(phone);
+    return normalized.length >= 7 && normalized.length <= 15;
   }
 
   /**
@@ -514,11 +499,11 @@ export class MessageUtils {
     const regex = /{{([^}]+)}}/g;
     const variables: string[] = [];
     let match;
-    
+
     while ((match = regex.exec(template)) !== null) {
       variables.push(match[1]);
     }
-    
+
     return variables;
   }
 
@@ -527,13 +512,13 @@ export class MessageUtils {
    */
   static replaceTemplateVariables(template: string, data: Record<string, any>): string {
     let result = template;
-    
+
     Object.keys(data).forEach(key => {
       const value = data[key];
       const regex = new RegExp(`{{${key}}}`, 'g');
       result = result.replace(regex, value);
     });
-    
+
     return result;
   }
 }
